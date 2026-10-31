@@ -68,7 +68,57 @@ function addCenter(start, count, depth, positions, normals, indices) {
   }
 }
 
+function connectRings(ring, count, indices) {
+  if (ring === 0) return;
+  for (let i = 0; i < count; i++) {
+    const next = (i + 1) % count;
+    const a = (ring - 1) * count + i, aNext = (ring - 1) * count + next;
+    const b = ring * count + i, bNext = ring * count + next;
+    indices.push(a, b, aNext, aNext, b, bNext);
+  }
+}
+
+function createBowlGeometry(width, height, depth) {
+  const boundary = outline(width, height), points = [];
+  const halfWidth = width / 2, halfHeight = height / 2;
+  for (let i = 0; i < boundary.length; i++) {
+    const a = boundary[i], b = boundary[(i + 1) % boundary.length];
+    // Also sample the straight edges: large triangles amplify reflection bands.
+    const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 0.025);
+    for (let j = 0; j < steps; j++) {
+      const t = j / steps;
+      const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
+      const nx = a.nx + (b.nx - a.nx) * t, ny = a.ny + (b.ny - a.ny) * t;
+      const r = Math.hypot(x / halfWidth, y / halfHeight);
+      const ex = x / r, ey = y / r;
+      const tx = -halfWidth * y / (halfHeight * r), ty = halfHeight * x / (halfWidth * r);
+      const dr = -r * (nx * tx + ny * ty) / (nx * ex + ny * ey);
+      points.push({ x, y, ex, ey, tx, ty, dx: dr * ex + (r - 1) * tx, dy: dr * ey + (r - 1) * ty });
+    }
+  }
+  const positions = [], normals = [], indices = [];
+  const rings = sectionRings(depth, 0, 'bowl');
+  for (let ring = 0; ring < rings.length; ring++) {
+    const { scale: q, depth: z, side, up } = rings[ring];
+    const w = q ** 4;
+    for (const { x, y, ex, ey, tx, ty, dx, dy } of points) {
+      // Fade the rectangular boundary into an elliptical interior. High-order
+      // boundary detail vanishes at the center instead of forming radial ridges.
+      positions.push(q * (ex + w * (x - ex)), q * (ey + w * (y - ey)), -z);
+      const px = tx + w * dx, py = ty + w * dy;
+      const qx = ex + 5 * w * (x - ex), qy = ey + 5 * w * (y - ey);
+      const nx = -side * py, ny = side * px, nz = up * (qx * py - qy * px);
+      const length = Math.hypot(nx, ny, nz);
+      normals.push(nx / length, ny / length, nz / length);
+    }
+    connectRings(ring, points.length, indices);
+  }
+  addCenter((rings.length - 1) * points.length, points.length, depth, positions, normals, indices);
+  return geometry(positions, normals, indices);
+}
+
 export function createCavityGeometry(width, height, depth, radius, shape = 'plate') {
+  if (shape === 'bowl') return createBowlGeometry(width, height, depth);
   const points = outline(width, height);
   const positions = [], normals = [], indices = [];
   const rings = sectionRings(depth, radius, shape);
@@ -77,22 +127,12 @@ export function createCavityGeometry(width, height, depth, radius, shape = 'plat
     for (let i = 0; i < points.length; i++) {
       const { x, y, nx, ny } = points[i];
       positions.push(x * scale - Math.sign(x) * inset, y * scale - Math.sign(y) * inset, -z);
-      // The bowl uses homothetic aperture rings; include their local support
-      // distance so the normals follow the actual surface, including corners.
-      const nz = up * (shape === 'bowl' ? -(nx * x + ny * y) : 1);
-      const length = Math.hypot(nx * side, ny * side, nz);
-      normals.push(nx * side / length, ny * side / length, nz / length);
-      if (ring === 0) continue;
-      const a = (ring - 1) * points.length + i;
-      const next = (i + 1) % points.length;
-      const aNext = (ring - 1) * points.length + next;
-      const b = ring * points.length + i;
-      const bNext = ring * points.length + next;
-      indices.push(a, b, aNext, aNext, b, bNext);
+      const length = Math.hypot(nx * side, ny * side, up);
+      normals.push(nx * side / length, ny * side / length, up / length);
     }
+    connectRings(ring, points.length, indices);
   }
-  if (shape === 'bowl') addCenter((rings.length - 1) * points.length, points.length, depth, positions, normals, indices);
-  else addFloor(points, radius, depth, positions, normals, indices);
+  addFloor(points, radius, depth, positions, normals, indices);
   return geometry(positions, normals, indices);
 }
 
