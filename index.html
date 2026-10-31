@@ -39,9 +39,11 @@
     <details class="settings-group" name="settings">
       <summary>素材</summary>
       <label>ベース色 <output id="baseColorValue"></output><input id="baseColor" type="color" value="#5c5c5c"></label>
-      <label>反射の強さ <output id="specularValue"></output><input id="specular" type="range" min="0" max="100" value="20" step="1"></label>
+      <label>光源の反射 <output id="specularValue"></output><input id="specular" type="range" min="0" max="100" value="20" step="1"></label>
+      <label>環境の映り込み <output id="environmentValue"></output><input id="environment" type="range" min="0" max="300" value="100" step="1"></label>
       <label>表面の粗さ <output id="roughnessValue"></output><input id="roughness" type="range" min="5" max="100" value="65" step="1"></label>
-      <p class="footnote">粗さが小さいほど鋭い光沢、大きいほど広く柔らかい光沢になります。反射0%でマットな面に戻ります。MainLayerは白いままです。</p>
+      <p class="footnote">光源の反射と環境の映り込みは個別に調整できます。粗さが小さいほどくっきり映り、大きいほどぼやけます。両方0%でマットな面に戻ります。MainLayerは白いままです。</p>
+      <p id="environmentState" class="footnote" role="status">環境画像を読み込み中です。</p>
     </details>
     <details class="settings-group" name="settings">
       <summary>操作</summary>

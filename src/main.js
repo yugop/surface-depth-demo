@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -6,8 +7,8 @@ import { createCavityGeometry, createMainLayerGeometry } from './geometry.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
-const defaults = { opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'roughness'];
+const defaults = { opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'roughness'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
 }]));
@@ -33,6 +34,9 @@ const uniforms = {
   opening: { value: defaults.opening / 100 }, mainShadows: { value: defaults.mainShadows },
   brightness: { value: defaults.brightness / 100 }, ambient: { value: defaults.ambient / 100 },
   specularStrength: { value: defaults.specular / 100 }, roughness: { value: defaults.roughness / 100 },
+  environmentMap: { value: null }, environmentReady: { value: false },
+  environmentStrength: { value: defaults.environment / 100 }, environmentMaxLod: { value: 0 },
+  environmentRotation: { value: new THREE.Matrix3() },
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
@@ -89,11 +93,32 @@ const screenRotation = new THREE.Quaternion();
 const zAxis = new THREE.Vector3(0, 0, 1);
 const baseLight = new THREE.Vector3();
 const targetLight = new THREE.Vector3();
+const environmentTransform = new THREE.Matrix4();
 let dirty = true;
 let frames = 0;
 let lastTime = performance.now();
 let fpsStart = lastTime;
 let measuredFps = '—';
+
+async function loadEnvironment() {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  let source;
+  try {
+    source = await new HDRLoader().loadAsync('./environment/lebombo_1k.hdr');
+    source.mapping = THREE.EquirectangularReflectionMapping;
+    const target = pmrem.fromEquirectangular(source);
+    uniforms.environmentMap.value = target.texture;
+    uniforms.environmentMaxLod.value = target.texture.mipmaps.length - 1;
+    uniforms.environmentReady.value = true;
+    $('environmentState').textContent = '室内の環境画像を読み込みました。';
+    dirty = true;
+  } catch {
+    $('environmentState').textContent = '環境画像を読み込めませんでした。ページを再読み込みしてください。';
+  } finally {
+    source?.dispose();
+    pmrem.dispose();
+  }
+}
 
 function diagnostics() {
   const box = stage.getBoundingClientRect();
@@ -148,6 +173,7 @@ function updateControls() {
   }
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
+  uniforms.environmentStrength.value = values.environment / 100;
   uniforms.depth.value = values.depth / 100;
   uniforms.lightRadius.value = values.size / 100;
   $('shadows').checked = values.shadows;
@@ -324,6 +350,9 @@ renderer.setAnimationLoop((time) => {
   targetLight.copy(baseLight);
   if (hasReading && motionCalibrated) targetLight.applyQuaternion(smoothed);
   uniforms.lightPosition.value.copy(targetLight);
+  // Reflection directions go from phone space back into the fixed environment.
+  environmentTransform.makeRotationFromQuaternion(smoothed);
+  uniforms.environmentRotation.value.setFromMatrix4(environmentTransform).transpose();
   renderer.render(scene, camera);
   dirty = false;
 });
@@ -331,3 +360,4 @@ initializeCalibration();
 updateControls();
 resize();
 startTilt();
+loadEnvironment();
