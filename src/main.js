@@ -167,7 +167,7 @@ function updateControls() {
   $('radius').max = Math.min(values.depth, MAX_FLOOR_RADIUS);
   $('radius').disabled = values.shape === 'bowl';
   const scaleStep = Number($('plateHorizontalScale').step);
-  const maxScale = values.radius > 0 ? Math.min(4, Math.floor(MAX_FLOOR_RADIUS / values.radius / scaleStep) * scaleStep) : 4;
+  const maxScale = values.radius > 0 ? Math.min(5, Math.floor(MAX_FLOOR_RADIUS / values.radius / scaleStep) * scaleStep) : 5;
   $('plateHorizontalScale').max = Number(maxScale.toFixed(2));
   values.plateHorizontalScale = Number(Math.min(values.plateHorizontalScale, maxScale).toFixed(2));
   $('plateHorizontalScale').disabled = values.shape !== 'plate' || values.radius === 0;
