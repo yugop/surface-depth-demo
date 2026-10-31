@@ -35,11 +35,9 @@ const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
 scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
 
-let motionEnabled = true;
 let motionCalibrated = false;
 let permissionGranted = typeof window.DeviceOrientationEvent?.requestPermission !== 'function';
 let permissionPending = false;
-let permissionGeneration = 0;
 let hasReading = false;
 let pendingCalibration = true;
 const orientation = new THREE.Quaternion();
@@ -121,32 +119,20 @@ function updateControls() {
   dirty = true;
 }
 function updateMotionUI() {
-  $('motion').checked = motionEnabled;
-  $('calibrate').disabled = !motionEnabled || permissionPending;
-  $('hint').hidden = !motionEnabled || motionCalibrated || !$('panel').hidden;
+  $('calibrate').disabled = permissionPending;
+  $('hint').hidden = motionCalibrated || !$('panel').hidden;
 }
-function stopMotion(message = '光源の向きを固定しています。') {
-  motionEnabled = false;
-  motionCalibrated = false;
-  pendingCalibration = false;
-  permissionGeneration++;
-  status(message);
-  updateMotionUI();
-  dirty = true;
-}
-function enableMotion() {
-  motionEnabled = true;
+function initializeCalibration() {
   motionCalibrated = false;
   pendingCalibration = true;
   if (permissionGranted && hasReading) calibrate();
-  else status('画面をタップすると、その姿勢を基準に傾きを使います。');
+  else status('傾きは常にONです。タップ・ドラッグで基準姿勢を更新します。');
   updateMotionUI();
   dirty = true;
 }
 for (const key of sliderKeys) {
   $(key).addEventListener('input', () => {
     values[key] = Number($(key).value);
-    if (key === 'azimuth' || key === 'elevation') stopMotion();
     updateControls();
   });
 }
@@ -170,8 +156,8 @@ window.addEventListener('deviceorientation', (event) => {
   screenRotation.setFromAxisAngle(zAxis, -rad(screen.orientation?.angle ?? window.orientation ?? 0));
   orientation.multiply(screenRotation);
   hasReading = true;
-  if (pendingCalibration && motionEnabled && permissionGranted) calibrate();
-  if (motionEnabled) dirty = true;
+  if (pendingCalibration && permissionGranted) calibrate();
+  dirty = true;
 });
 function calibrate() {
   baseline.copy(orientation);
@@ -179,13 +165,13 @@ function calibrate() {
   smoothed.identity();
   motionCalibrated = true;
   pendingCalibration = false;
-  status('この姿勢を基準にしました。画面タップで基準を取り直せます。');
+  status('この姿勢を基準にしました。タップ・ドラッグで基準を取り直せます。');
   updateMotionUI();
   dirty = true;
 }
 // Call directly from a click so Safari retains the user activation for permission.
 async function useTiltAtTap() {
-  if (!motionEnabled || permissionPending) return;
+  if (permissionPending) return;
   if (!window.isSecureContext) { status('傾き操作はHTTPSで開いてください。'); return; }
   if (!window.DeviceOrientationEvent) { status('この環境では傾きを取得できません。設定で光源を調整できます。'); return; }
   if (permissionGranted) {
@@ -193,34 +179,27 @@ async function useTiltAtTap() {
     else { pendingCalibration = true; status('傾きデータを待っています。最初に届いた姿勢を基準にします。'); }
     return;
   }
-  const generation = permissionGeneration;
   permissionPending = true;
   updateMotionUI();
   try {
     const result = await DeviceOrientationEvent.requestPermission();
     permissionGranted = result === 'granted';
-    if (generation !== permissionGeneration || !motionEnabled) return;
     if (!permissionGranted) {
       pendingCalibration = false;
       status('傾きが許可されていません。画面タップで再試行するか、設定で光源を調整してください。');
     } else if (hasReading) calibrate();
     else { pendingCalibration = true; status('許可しました。最初に届く姿勢を基準にします。'); }
   } catch {
-    if (generation === permissionGeneration && motionEnabled) status('傾きを有効にできませんでした。画面をタップして再試行してください。');
+    status('傾きを有効にできませんでした。画面をタップして再試行してください。');
   } finally {
     permissionPending = false;
     updateMotionUI();
   }
 }
 $('calibrate').onclick = useTiltAtTap;
-$('motion').onchange = () => {
-  if ($('motion').checked) { enableMotion(); useTiltAtTap(); }
-  else stopMotion();
-};
 $('reset').onclick = () => {
   Object.assign(values, defaults);
-  permissionGeneration++;
-  enableMotion();
+  initializeCalibration();
   updateControls();
 };
 let drag;
@@ -228,20 +207,22 @@ let dragged = false;
 stage.addEventListener('pointerdown', (event) => {
   if (!event.isPrimary) return;
   dragged = false;
-  drag = { id: event.pointerId, x: event.clientX, y: event.clientY, azimuth: values.azimuth, elevation: values.elevation };
+  drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
   stage.setPointerCapture(event.pointerId);
 });
 stage.addEventListener('pointermove', (event) => {
   if (!drag || event.pointerId !== drag.id) return;
-  if (!dragged && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 8) return;
-  if (!dragged) { dragged = true; stopMotion(); }
-  values.azimuth = Math.round(THREE.MathUtils.clamp(drag.azimuth + (event.clientX - drag.x) * .5, -180, 180));
-  values.elevation = Math.round(THREE.MathUtils.clamp(drag.elevation - (event.clientY - drag.y) * .3, 15, 90));
-  updateControls();
+  if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) >= 8) dragged = true;
+});
+// A completed drag establishes a new neutral pose; it never changes light angles.
+stage.addEventListener('pointerup', (event) => {
+  if (!drag || event.pointerId !== drag.id) return;
+  if (dragged) useTiltAtTap();
+  drag = null;
 });
 stage.addEventListener('click', () => { if (!dragged) useTiltAtTap(); });
 stage.addEventListener('pointercancel', () => { dragged = true; drag = null; });
-for (const name of ['pointerup', 'lostpointercapture']) stage.addEventListener(name, () => { drag = null; });
+stage.addEventListener('lostpointercapture', () => { drag = null; });
 
 renderer.setAnimationLoop((time) => {
   const dt = Math.min((time - lastTime) / 1000, .1);
@@ -253,7 +234,7 @@ renderer.setAnimationLoop((time) => {
     fpsStart = time;
     if (!$('panel').hidden) diagnostics();
   }
-  if (motionEnabled && hasReading && motionCalibrated) {
+  if (hasReading && motionCalibrated) {
     // Q_current^-1 Q_baseline maps the fixed world light into the current phone frame.
     relative.copy(orientation).invert().multiply(baseline);
     smoothed.slerp(relative, 1 - Math.exp(-dt * 12));
@@ -264,11 +245,11 @@ renderer.setAnimationLoop((time) => {
   const el = THREE.MathUtils.degToRad(values.elevation);
   baseLight.set(Math.sin(az)*Math.cos(el), Math.cos(az)*Math.cos(el), Math.sin(el)).multiplyScalar(2);
   targetLight.copy(baseLight);
-  if (motionEnabled && hasReading && motionCalibrated) targetLight.applyQuaternion(smoothed);
+  if (hasReading && motionCalibrated) targetLight.applyQuaternion(smoothed);
   uniforms.lightPosition.value.copy(targetLight);
   renderer.render(scene, camera);
   dirty = false;
 });
-enableMotion();
+initializeCalibration();
 updateControls();
 resize();

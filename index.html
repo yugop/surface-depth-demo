@@ -43,16 +43,15 @@
     </details>
     <details class="settings-group" name="settings">
       <summary>操作</summary>
-      <label class="toggle"><input id="motion" type="checkbox" checked>傾きを使う</label>
       <button id="calibrate">今の姿勢を基準に</button>
-      <p class="footnote">画面タップで基準姿勢を更新します。初回はセンサーの利用許可が必要な場合があります。画面をドラッグするか、光源の左右・高さを変えると手動操作になります。</p>
+      <p class="footnote">傾きは常にONです。タップ時・ドラッグ終了時の姿勢を新しい基準にし、その後も連動を続けます。初回はセンサーの利用許可が必要な場合があります。</p>
       <p id="diagnostics"></p>
       <p class="footnote">深さ・R・光源サイズは画面短辺に対する割合。iPhoneではSafariの共有からホーム画面に追加し、追加したアイコンから開いてください。</p>
     </details>
-    <p id="status" role="status">画面をタップすると、その姿勢を基準に傾きを使います。</p>
+    <p id="status" role="status">傾きは常にONです。タップ・ドラッグで基準姿勢を更新します。</p>
     <button id="reset" class="quiet">初期値に戻す</button>
   </section>
-  <p id="hint">画面をタップすると、その姿勢を基準に傾きを使います。</p>
+  <p id="hint">傾きは常にONです。タップ・ドラッグで基準姿勢を更新します。</p>
   <p id="error" role="alert" hidden></p>
   <script type="module" src="./src/main.js"></script>
 </body>
