@@ -18,6 +18,8 @@ export function loadSettings(defaults, ranges, getStorage = () => globalThis.loc
         values[key] = Math.min(max, Math.max(min, Number((min + Math.round((bounded-min)/step)*step).toFixed(6))));
       } else if (typeof fallback === 'boolean' && typeof value === 'boolean') {
         values[key] = value;
+      } else if (key === 'shape' && ['plate', 'bowl'].includes(value)) {
+        values[key] = value;
       } else if (key === 'baseColor' && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) {
         values[key] = value;
       }

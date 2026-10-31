@@ -3,11 +3,11 @@ import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
-import { createCavityGeometry, createMainLayerGeometry } from './geometry.js';
+import { cavitySection, createCavityGeometry, createMainLayerGeometry } from './geometry.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
-const defaults = { opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
 const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'roughness'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
@@ -66,9 +66,9 @@ function updateGeometry() {
   if (!x || !y) return;
   const width = x / Math.min(x, y), height = y / Math.min(x, y);
   const sizeChanged = !geometryState || width !== geometryState.width || height !== geometryState.height;
-  if (sizeChanged || values.depth !== geometryState.depth || values.radius !== geometryState.radius) {
+  if (sizeChanged || values.shape !== geometryState.shape || values.depth !== geometryState.depth || values.radius !== geometryState.radius) {
     cavity.geometry.dispose();
-    cavity.geometry = createCavityGeometry(width, height, values.depth / 100, values.radius / 100);
+    cavity.geometry = createCavityGeometry(width, height, values.depth / 100, values.radius / 100, values.shape);
   }
   if (sizeChanged) {
     mainLayer.geometry.dispose();
@@ -76,7 +76,7 @@ function updateGeometry() {
   }
   mainLayer.position.y = values.opening / 100 * height;
   mainLayer.visible = values.opening < 100;
-  geometryState = { width, height, depth: values.depth, radius: values.radius };
+  geometryState = { width, height, depth: values.depth, radius: values.radius, shape: values.shape };
 }
 
 let motionCalibrated = false;
@@ -167,6 +167,8 @@ window.addEventListener('keydown', (event) => { if (event.key === 'Escape') setP
 function updateControls() {
   values.radius = Math.min(values.radius, values.depth, MAX_FLOOR_RADIUS);
   $('radius').max = Math.min(values.depth, MAX_FLOOR_RADIUS);
+  $('radius').disabled = values.shape === 'bowl';
+  $('shape').value = values.shape;
   for (const key of sliderKeys) {
     $(key).value = values[key];
     $(`${key}Value`).textContent = `${values[key]}${['fov', 'azimuth', 'elevation'].includes(key) ? '°' : '%'}`;
@@ -185,10 +187,9 @@ function updateControls() {
   $('size').disabled = !(values.shadows || (values.mainShadows && values.opening > 0 && values.opening < 100));
   uniforms.shadows.value = values.shadows;
   uniforms.baseColor.value.set(values.baseColor);
-  const d = values.depth * 1.7;
-  const r = values.radius * 1.7;
-  $('profile').setAttribute('d', `M16 18 V${18+d-r} A${r} ${r} 0 0 0 ${16+r} ${18+d} H${284-r} A${r} ${r} 0 0 0 284 ${18+d-r} V18`);
-  $('dimensions').textContent = `D ${values.depth}%  /  R ${values.radius}%`;
+  const section = cavitySection(values.depth / 100, values.radius / 100, values.shape);
+  $('profile').setAttribute('d', section.map(([x, z], i) => `${i ? 'L' : 'M'}${150 + x * 268} ${18 + z * 170}`).join(' '));
+  $('dimensions').textContent = values.shape === 'plate' ? `皿 / D ${values.depth}% / R ${values.radius}%` : `お椀 / D ${values.depth}%`;
   updateCamera();
   updateGeometry();
   dirty = true;
@@ -217,6 +218,10 @@ for (const key of sliderKeys) {
     saveControls();
   });
 }
+$('shape').addEventListener('change', () => {
+  values.shape = $('shape').value;
+  saveControls();
+});
 $('shadows').addEventListener('change', () => {
   values.shadows = $('shadows').checked;
   saveControls();

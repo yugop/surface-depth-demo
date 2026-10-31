@@ -17,11 +17,13 @@
     <header><div><span class="eyebrow">SURFACE DEPTH DEMO</span><h1>凹みと光</h1></div><button id="close" aria-label="調整を閉じる">×</button></header>
     <details class="settings-group" name="settings" open>
       <summary>形状</summary>
+      <label>凹みの形<select id="shape"><option value="plate">皿（平らな底）</option><option value="bowl" selected>お椀（全面カーブ）</option></select></label>
+      <p class="footnote">皿は平らな底へなだらかにつながり、お椀は中央まで曲面が続きます。Rは皿の丸みの範囲を調整します。</p>
       <label>MainLayerの開き量 <output id="openingValue"></output><input id="opening" type="range" min="0" max="100" value="50" step="1"></label>
       <p class="footnote">画面高さに対する上昇量。0%で白い全面、100%でAILayerの全面表示。</p>
       <svg id="section" viewBox="0 0 300 100" role="img" aria-label="側壁と底面の断面図"><path id="profile"/><path class="datum" d="M16 18 H284"/><text x="150" y="12" text-anchor="middle">開口面</text><text id="dimensions" x="150" y="94" text-anchor="middle"></text></svg>
       <label>凹みの深さ <output id="depthValue"></output><input id="depth" type="range" min="1" max="30" value="20" step="0.5"></label>
-      <label>底の角のR <output id="radiusValue"></output><input id="radius" type="range" min="0" max="20" value="20" step="0.25"></label>
+      <label>皿の丸み（R） <output id="radiusValue"></output><input id="radius" type="range" min="0" max="20" value="20" step="0.25"></label>
       <label>カメラの画角（縦） <output id="fovValue"></output><input id="fov" type="range" min="20" max="120" value="82" step="1"></label>
       <p class="footnote">開口面は画面にフィットしたまま、画角が大きいほど遠近感が強くなります。</p>
     </details>
