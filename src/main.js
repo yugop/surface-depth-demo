@@ -93,6 +93,12 @@ function setPanel(open) {
 }
 $('settings').onclick = () => setPanel(true);
 $('close').onclick = () => setPanel(false);
+document.addEventListener('click', (event) => {
+  if ($('panel').hidden || $('panel').contains(event.target)) return;
+  setPanel(false);
+  // Dismiss the panel without also recalibrating the scene behind it.
+  event.stopPropagation();
+}, true);
 window.addEventListener('keydown', (event) => { if (event.key === 'Escape') setPanel(false); });
 
 function updateControls() {
