@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ENVIRONMENTS, createEnvironmentController } from './environments.js';
+import { MATERIALS, createMaterialController } from './materials.js';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -12,8 +13,13 @@ for (const entry of ENVIRONMENTS) {
   option.value = entry.id; option.textContent = entry.label;
   $('environmentSource').append(option);
 }
-const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, plateHorizontalScale: 1, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'plateHorizontalScale', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness'];
+for (const entry of MATERIALS) {
+  const option = document.createElement('option');
+  option.value = entry.id; option.textContent = entry.label;
+  $('surfaceMaterial').append(option);
+}
+const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, plateHorizontalScale: 1, projection: 'perspective', fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, surfaceMaterial: 'solid', materialScale: 1, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'plateHorizontalScale', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness', 'materialScale'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
 }]));
@@ -44,10 +50,17 @@ const uniforms = {
   environmentRotation: { value: new THREE.Matrix3() },
   cameraMap: { value: null }, cameraMode: { value: false },
   cameraAspect: { value: 1 }, cameraMaxLod: { value: 0 },
+  materialReady: { value: false }, materialScale: { value: 1 },
+  orthographicView: { value: false },
+  materialColorMap: { value: null }, materialNormalMap: { value: null },
+  materialRoughnessMap: { value: null }, materialMetalnessMap: { value: null }, materialOcclusionMap: { value: null },
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(values.fov, 1, 0.01, 10);
+const perspectiveCamera = new THREE.PerspectiveCamera(values.fov, 1, 0.01, 10);
+const orthographicCamera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.01, 2);
+orthographicCamera.position.z = 1;
+let camera = perspectiveCamera;
 const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
 const cavity = new THREE.Mesh(new THREE.BufferGeometry(), material);
 cavity.name = 'AILayer';
@@ -59,12 +72,19 @@ let geometryState;
 function updateCamera() {
   const { x, y } = uniforms.resolution.value;
   if (!x || !y) return;
-  const halfHeight = y / Math.min(x, y) * 0.5;
-  camera.aspect = x / y;
-  camera.fov = values.fov;
-  // Keep the aperture at z=0 fitted while changing perspective strength.
-  camera.position.z = halfHeight / Math.tan(THREE.MathUtils.degToRad(values.fov) / 2);
-  camera.far = camera.position.z + 1;
+  const halfWidth = x / Math.min(x, y) * 0.5, halfHeight = y / Math.min(x, y) * 0.5;
+  camera = values.projection === 'orthographic' ? orthographicCamera : perspectiveCamera;
+  uniforms.orthographicView.value = camera.isOrthographicCamera === true;
+  if (camera.isOrthographicCamera) {
+    camera.left = -halfWidth; camera.right = halfWidth;
+    camera.top = halfHeight; camera.bottom = -halfHeight;
+  } else {
+    camera.aspect = x / y;
+    camera.fov = values.fov;
+    // Keep the aperture at z=0 fitted while changing perspective strength.
+    camera.position.z = halfHeight / Math.tan(THREE.MathUtils.degToRad(values.fov) / 2);
+    camera.far = camera.position.z + 1;
+  }
   camera.updateProjectionMatrix();
 }
 
@@ -109,6 +129,10 @@ let lastTime = performance.now();
 let fpsStart = lastTime;
 let measuredFps = '—';
 
+const materialController = createMaterialController(renderer, uniforms, message => {
+  $('materialState').textContent = message;
+  dirty = true;
+});
 const environmentController = createEnvironmentController(renderer, uniforms, state => {
   $('environmentState').textContent = state.message;
   $('frontCamera').hidden = state.kind !== 'camera';
@@ -172,13 +196,19 @@ function updateControls() {
   values.plateHorizontalScale = Number(Math.min(values.plateHorizontalScale, maxScale).toFixed(2));
   $('plateHorizontalScale').disabled = values.shape !== 'plate' || values.radius === 0;
   $('shape').value = values.shape;
+  $('projection').value = values.projection;
+  $('fov').disabled = values.projection === 'orthographic';
+  $('surfaceMaterial').value = values.surfaceMaterial;
+  $('materialScale').disabled = values.surfaceMaterial === 'solid';
+  $('baseColor').disabled = values.surfaceMaterial !== 'solid';
   $('environmentSource').value = values.environmentSource;
   for (const key of sliderKeys) {
     $(key).value = values[key];
-    $(`${key}Value`).textContent = key === 'plateHorizontalScale' ? `${values[key].toFixed(2)}×` : `${values[key]}${['fov', 'azimuth', 'elevation', 'environmentYaw'].includes(key) ? '°' : '%'}`;
+    $(`${key}Value`).textContent = ['plateHorizontalScale', 'materialScale'].includes(key) ? `${values[key].toFixed(2)}×` : `${values[key]}${['fov', 'azimuth', 'elevation', 'environmentYaw'].includes(key) ? '°' : '%'}`;
   }
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
+  uniforms.materialScale.value = values.materialScale;
   uniforms.environmentStrength.value = values.environment / 100;
   uniforms.depth.value = values.depth / 100;
   uniforms.lightRadius.value = values.size / 100;
@@ -230,6 +260,15 @@ $('environmentSource').addEventListener('change', () => {
   values.environmentSource = $('environmentSource').value;
   saveControls();
   environmentController.select(values.environmentSource);
+});
+$('projection').addEventListener('change', () => {
+  values.projection = $('projection').value;
+  saveControls();
+});
+$('surfaceMaterial').addEventListener('change', () => {
+  values.surfaceMaterial = $('surfaceMaterial').value;
+  saveControls();
+  materialController.select(values.surfaceMaterial);
 });
 $('frontCamera').onclick = () => {
   if (environmentController.cameraRunning || environmentController.cameraPending) environmentController.stopCamera();
@@ -322,6 +361,7 @@ $('reset').onclick = () => {
   Object.assign(values, defaults);
   initializeCalibration();
   saveControls(true);
+  materialController.select(values.surfaceMaterial);
   environmentController.select(values.environmentSource);
 };
 let drag;
@@ -387,3 +427,4 @@ updateControls();
 resize();
 startTilt();
 environmentController.select(values.environmentSource);
+materialController.select(values.surfaceMaterial);

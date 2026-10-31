@@ -26,6 +26,7 @@
       <label>皿の丸み（R） <output id="radiusValue"></output><input id="radius" type="range" min="0" max="20" value="20" step="0.25"></label>
       <label>皿のカーブ・水平倍率 <output id="plateHorizontalScaleValue"></output><input id="plateHorizontalScale" type="range" min="0.25" max="5" value="1" step="0.05"></label>
       <p class="footnote">1倍が標準。縦方向を保って横へ広げるほど、なだらかなカーブになります。上限はRと開口の幅に合わせます。</p>
+      <label>カメラの投影<select id="projection"><option value="perspective">透視投影（パースペクティブ）</option><option value="orthographic">平行投影</option></select></label>
       <label>カメラの画角（縦） <output id="fovValue"></output><input id="fov" type="range" min="20" max="120" value="82" step="1"></label>
       <p class="footnote">開口面は画面にフィットしたまま、画角が大きいほど遠近感が強くなります。</p>
     </details>
@@ -42,7 +43,11 @@
     </details>
     <details class="settings-group" name="settings">
       <summary>素材</summary>
-      <label>ベース色 <output id="baseColorValue"></output><input id="baseColor" type="color" value="#5c5c5c"></label>
+      <label>表面の素材<select id="surfaceMaterial"></select></label>
+      <label>模様の繰り返し <output id="materialScaleValue"></output><input id="materialScale" type="range" min="0.25" max="8" value="1" step="0.25"></label>
+      <p class="footnote">画像素材は元の色を使います。粗さ65%が素材の基準で、上下に調整できます。</p>
+      <p id="materialState" class="footnote" role="status"></p>
+      <label>ベース色（単色） <output id="baseColorValue"></output><input id="baseColor" type="color" value="#5c5c5c"></label>
       <label>光源の反射 <output id="specularValue"></output><input id="specular" type="range" min="0" max="100" value="20" step="1"></label>
       <label>環境<select id="environmentSource"></select></label>
       <button id="frontCamera" hidden>カメラを開始</button>
@@ -50,7 +55,7 @@
       <label>環境の基準角（Y） <output id="environmentYawValue"></output><input id="environmentYaw" type="range" min="-180" max="180" value="0" step="1"></label>
       <p class="footnote">基準角は端末の傾きに加える向きです。カメラは前方のライブ映像を使う近似で、映像は端末内で処理します。</p>
       <label>表面の粗さ <output id="roughnessValue"></output><input id="roughness" type="range" min="5" max="100" value="65" step="1"></label>
-      <p class="footnote">光源の反射と環境の映り込みは個別に調整できます。粗さが小さいほどくっきり映り、大きいほどぼやけます。両方0%でマットな面に戻ります。MainLayerは白いままです。</p>
+      <p class="footnote">光源の反射と環境の映り込みは個別に調整できます。粗さが小さいほどくっきり映り、大きいほどぼやけます。MainLayerは白いままです。</p>
       <p id="environmentState" class="footnote" role="status">環境を読み込み中です。</p>
     </details>
     <details class="settings-group" name="settings">

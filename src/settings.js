@@ -1,5 +1,6 @@
 // Keep this key and parameter names stable across builds and layout changes.
 import { ENVIRONMENTS } from './environments.js';
+import { MATERIALS } from './materials.js';
 
 export const SETTINGS_KEY = 'surface-depth-demo.settings';
 
@@ -21,6 +22,10 @@ export function loadSettings(defaults, ranges, getStorage = () => globalThis.loc
       } else if (typeof fallback === 'boolean' && typeof value === 'boolean') {
         values[key] = value;
       } else if (key === 'shape' && ['plate', 'bowl'].includes(value)) {
+        values[key] = value;
+      } else if (key === 'projection' && ['perspective', 'orthographic'].includes(value)) {
+        values[key] = value;
+      } else if (key === 'surfaceMaterial' && MATERIALS.some(entry => entry.id === value)) {
         values[key] = value;
       } else if (key === 'environmentSource' && ENVIRONMENTS.some(entry => entry.id === value)) {
         values[key] = value;
