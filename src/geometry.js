@@ -7,7 +7,7 @@ const PROFILE_SEGMENTS = 32;
 function blend(t) { return t * t * t * (4 + t * (-4.5 + 1.5 * t)); }
 function blendSlope(t) { return t * t * (12 + t * (-18 + 7.5 * t)); }
 
-function sectionRings(depth, radius, shape) {
+function sectionRings(depth, radius, shape, horizontalScale = 1) {
   if (shape === 'bowl') {
     return Array.from({ length: PROFILE_SEGMENTS }, (_, i) => {
       const angle = i / PROFILE_SEGMENTS * Math.PI / 2;
@@ -20,14 +20,14 @@ function sectionRings(depth, radius, shape) {
   if (radius > 0) {
     for (let i = 1; i <= PROFILE_SEGMENTS; i++) {
       const t = i / PROFILE_SEGMENTS;
-      rings.push({ scale: 1, inset: radius * blend(t), depth: depth - radius * blend(1 - t), side: blendSlope(1 - t), up: blendSlope(t) });
+      rings.push({ scale: 1, inset: radius * horizontalScale * blend(t), depth: depth - radius * blend(1 - t), side: blendSlope(1 - t), up: horizontalScale * blendSlope(t) });
     }
   }
   return rings;
 }
 
-export function cavitySection(depth, radius, shape) {
-  const left = sectionRings(depth, radius, shape).map(({ scale, inset, depth: z }) => [-0.5 * scale + inset, z]);
+export function cavitySection(depth, radius, shape, horizontalScale = 1) {
+  const left = sectionRings(depth, radius, shape, horizontalScale).map(({ scale, inset, depth: z }) => [-0.5 * scale + inset, z]);
   return [...left, [0, depth], ...[...left].reverse().map(([x, z]) => [-x, z])];
 }
 
@@ -117,11 +117,11 @@ function createBowlGeometry(width, height, depth) {
   return geometry(positions, normals, indices);
 }
 
-export function createCavityGeometry(width, height, depth, radius, shape = 'plate') {
+export function createCavityGeometry(width, height, depth, radius, shape = 'plate', horizontalScale = 1) {
   if (shape === 'bowl') return createBowlGeometry(width, height, depth);
   const points = outline(width, height);
   const positions = [], normals = [], indices = [];
-  const rings = sectionRings(depth, radius, shape);
+  const rings = sectionRings(depth, radius, shape, horizontalScale);
   for (let ring = 0; ring < rings.length; ring++) {
     const { scale, inset, depth: z, side, up } = rings[ring];
     for (let i = 0; i < points.length; i++) {
@@ -132,7 +132,7 @@ export function createCavityGeometry(width, height, depth, radius, shape = 'plat
     }
     connectRings(ring, points.length, indices);
   }
-  addFloor(points, radius, depth, positions, normals, indices);
+  addFloor(points, radius * horizontalScale, depth, positions, normals, indices);
   return geometry(positions, normals, indices);
 }
 

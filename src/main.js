@@ -12,8 +12,8 @@ for (const entry of ENVIRONMENTS) {
   option.value = entry.id; option.textContent = entry.label;
   $('environmentSource').append(option);
 }
-const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness'];
+const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, plateHorizontalScale: 1, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'plateHorizontalScale', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
 }]));
@@ -73,9 +73,9 @@ function updateGeometry() {
   if (!x || !y) return;
   const width = x / Math.min(x, y), height = y / Math.min(x, y);
   const sizeChanged = !geometryState || width !== geometryState.width || height !== geometryState.height;
-  if (sizeChanged || values.shape !== geometryState.shape || values.depth !== geometryState.depth || values.radius !== geometryState.radius) {
+  if (sizeChanged || values.shape !== geometryState.shape || values.depth !== geometryState.depth || values.radius !== geometryState.radius || values.plateHorizontalScale !== geometryState.plateHorizontalScale) {
     cavity.geometry.dispose();
-    cavity.geometry = createCavityGeometry(width, height, values.depth / 100, values.radius / 100, values.shape);
+    cavity.geometry = createCavityGeometry(width, height, values.depth / 100, values.radius / 100, values.shape, values.plateHorizontalScale);
   }
   if (sizeChanged) {
     mainLayer.geometry.dispose();
@@ -83,7 +83,7 @@ function updateGeometry() {
   }
   mainLayer.position.y = values.opening / 100 * height;
   mainLayer.visible = values.opening < 100;
-  geometryState = { width, height, depth: values.depth, radius: values.radius, shape: values.shape };
+  geometryState = { width, height, depth: values.depth, radius: values.radius, shape: values.shape, plateHorizontalScale: values.plateHorizontalScale };
 }
 
 let motionCalibrated = false;
@@ -166,11 +166,16 @@ function updateControls() {
   values.radius = Math.min(values.radius, values.depth, MAX_FLOOR_RADIUS);
   $('radius').max = Math.min(values.depth, MAX_FLOOR_RADIUS);
   $('radius').disabled = values.shape === 'bowl';
+  const scaleStep = Number($('plateHorizontalScale').step);
+  const maxScale = values.radius > 0 ? Math.min(4, Math.floor(MAX_FLOOR_RADIUS / values.radius / scaleStep) * scaleStep) : 4;
+  $('plateHorizontalScale').max = Number(maxScale.toFixed(2));
+  values.plateHorizontalScale = Number(Math.min(values.plateHorizontalScale, maxScale).toFixed(2));
+  $('plateHorizontalScale').disabled = values.shape !== 'plate' || values.radius === 0;
   $('shape').value = values.shape;
   $('environmentSource').value = values.environmentSource;
   for (const key of sliderKeys) {
     $(key).value = values[key];
-    $(`${key}Value`).textContent = `${values[key]}${['fov', 'azimuth', 'elevation', 'environmentYaw'].includes(key) ? '°' : '%'}`;
+    $(`${key}Value`).textContent = key === 'plateHorizontalScale' ? `${values[key].toFixed(2)}×` : `${values[key]}${['fov', 'azimuth', 'elevation', 'environmentYaw'].includes(key) ? '°' : '%'}`;
   }
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
@@ -186,9 +191,9 @@ function updateControls() {
   $('size').disabled = !(values.shadows || (values.mainShadows && values.opening > 0 && values.opening < 100));
   uniforms.shadows.value = values.shadows;
   uniforms.baseColor.value.set(values.baseColor);
-  const section = cavitySection(values.depth / 100, values.radius / 100, values.shape);
+  const section = cavitySection(values.depth / 100, values.radius / 100, values.shape, values.plateHorizontalScale);
   $('profile').setAttribute('d', section.map(([x, z], i) => `${i ? 'L' : 'M'}${150 + x * 268} ${18 + z * 170}`).join(' '));
-  $('dimensions').textContent = values.shape === 'plate' ? `皿 / D ${values.depth}% / R ${values.radius}%` : `お椀 / D ${values.depth}%`;
+  $('dimensions').textContent = values.shape === 'plate' ? `皿 / D ${values.depth}% / R ${values.radius}% / 横 ${values.plateHorizontalScale.toFixed(2)}×` : `お椀 / D ${values.depth}%`;
   updateCamera();
   updateGeometry();
   dirty = true;
