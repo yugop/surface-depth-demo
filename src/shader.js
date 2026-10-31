@@ -1,16 +1,22 @@
 import { CORNER_EXTENT, CORNER_PROFILE } from './iphone-air.js';
 
 export const vertexShader = `
-varying vec2 vUv;
-void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+varying vec3 vSurface;
+varying vec3 vSurfaceNormal;
+void main() {
+  vec4 surface = modelMatrix * vec4(position, 1.0);
+  vSurface = surface.xyz;
+  vSurfaceNormal = mat3(modelMatrix) * normal;
+  gl_Position = projectionMatrix * viewMatrix * surface;
+}
 `;
 
 export const fragmentShader = `
 precision highp float;
-varying vec2 vUv;
+varying vec3 vSurface;
+varying vec3 vSurfaceNormal;
 uniform vec2 resolution;
 uniform float depth;
-uniform float radius;
 uniform vec3 lightPosition;
 uniform float lightRadius;
 uniform bool shadows;
@@ -78,19 +84,14 @@ float mainVisibility(vec3 surface, vec3 forward, float aa) {
 }
 // Positive inside the aperture; the same profile also defines the floor contours.
 float aperture(vec2 p) { return roundedInset(p).x; }
-float floorDepth(float inset) {
-  if (radius < 0.00001 || inset >= radius) return depth;
-  float x = max(radius - inset, 0.0);
-  return depth - radius + sqrt(max(radius * radius - x * x, 0.0));
-}
-// Dielectric GGX reflection with a fixed orthographic view direction.
-float reflection(vec3 normal, vec3 light) {
+// Dielectric GGX reflection uses the actual direction back to the fixed eye.
+float reflection(vec3 normal, vec3 light, vec3 view) {
   float nl = max(dot(normal, light), 0.0);
-  float nv = max(normal.z, 0.0);
-  if (nl <= 0.0 || nv <= 0.0 || light.z <= -0.99999) return 0.0;
-  vec3 halfVector = normalize(light + vec3(0,0,1));
+  float nv = max(dot(normal, view), 0.0);
+  if (nl <= 0.0 || nv <= 0.0) return 0.0;
+  vec3 halfVector = normalize(light + view);
   float nh = max(dot(normal, halfVector), 0.0);
-  float vh = max(halfVector.z, 0.0);
+  float vh = max(dot(view, halfVector), 0.0);
   float alpha = max(roughness * roughness, 0.0025);
   float a2 = alpha * alpha;
   float d = nh * nh * (a2 - 1.0) + 1.0;
@@ -101,24 +102,15 @@ float reflection(vec3 normal, vec3 light) {
   return distribution * geometry * fresnel / max(4.0 * nv, 0.00001);
 }
 void main() {
-  vec2 p = (vUv - 0.5) * resolution / min(resolution.x, resolution.y);
-  vec3 contour = roundedInset(p);
-  if (contour.x < 0.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec3 surface = vSurface;
+  vec3 normal = normalize(vSurfaceNormal);
+  vec3 view = normalize(cameraPosition - surface);
+  float z = -surface.z;
   float aa = 1.0 / min(resolution.x, resolution.y);
-  float mainCoverage = opening <= 0.0 ? 1.0 : opening >= 1.0 ? 0.0 : smoothstep(-aa, aa, mainInset(p).x);
-  if (mainCoverage >= 1.0) { gl_FragColor = vec4(1.0); return; }
-  float inset = contour.x;
-  float z = floorDepth(inset);
-  vec3 surface = vec3(p, -z);
-  vec2 grad = contour.yz;
-  // Normal points into the hollow; the quarter circle has its centre at (R, D-R).
-  float curved = max(radius - inset, 0.0);
-  float nz = radius > 0.00001 ? sqrt(max(radius*radius-curved*curved,0.0)) : 1.0;
-  vec3 normal = inset < radius ? normalize(vec3(grad * curved, nz + 0.000001)) : vec3(0,0,1);
   vec3 forward = normalize(lightPosition);
   // Shadow-off comparison uses only the normal and a uniform light direction.
   float illumination = max(dot(normal, forward), 0.0);
-  float specular = reflection(normal, forward);
+  float specular = reflection(normal, forward, view);
   if (shadows) {
   vec3 tangent = lightTangent(forward);
   vec3 bitangent = cross(forward, tangent);
@@ -139,7 +131,7 @@ void main() {
       float visible = smoothstep(-aa, aa, aperture(exitPoint));
       float dist2 = dot(ray,ray);
       illumination += visible * max(dot(normal, normalize(ray)), 0.0) / dist2;
-      specular += visible * reflection(normal, normalize(ray)) / dist2;
+      specular += visible * reflection(normal, normalize(ray), view) / dist2;
     }
     vec3 refRay = source - vec3(0,0,-depth);
     reference += max(normalize(refRay).z, 0.0) / dot(refRay,refRay);
@@ -150,7 +142,6 @@ void main() {
   float visibility = mainVisibility(surface, forward, aa);
   vec3 color = baseColor * (ambient + illumination * brightness * visibility)
              + vec3(specular * specularStrength * brightness * visibility);
-  color = mix(color, vec3(1.0), mainCoverage);
   gl_FragColor = vec4(color,1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

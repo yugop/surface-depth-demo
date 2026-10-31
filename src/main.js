@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
+import { createCavityGeometry, createMainLayerGeometry } from './geometry.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
@@ -18,15 +19,17 @@ const isStandalone = () => standaloneMode.matches || navigator.standalone === tr
 const status = (text) => { $('status').textContent = text; $('hint').textContent = text; };
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas: $('view'), antialias: false, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ canvas: $('view'), antialias: true, powerPreference: 'high-performance' });
 } catch {
   $('error').hidden = false;
   $('error').textContent = '描画を開始できませんでした。WebGL 2が利用できるSafariまたはChromeで開いてください。';
   throw new Error('WebGL 2 unavailable');
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+// Fixed to the aperture: distances are measured in screen-short-side units.
+const cameraDistance = 1.25;
 const uniforms = {
-  resolution: { value: new THREE.Vector2() }, depth: { value: defaults.depth / 100 }, radius: { value: defaults.radius / 100 },
+  resolution: { value: new THREE.Vector2() }, depth: { value: defaults.depth / 100 },
   lightPosition: { value: new THREE.Vector3() }, lightRadius: { value: .18 },
   shadows: { value: defaults.shadows }, baseColor: { value: new THREE.Color(defaults.baseColor) },
   opening: { value: defaults.opening / 100 }, mainShadows: { value: defaults.mainShadows },
@@ -35,9 +38,33 @@ const uniforms = {
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10);
+camera.position.z = cameraDistance;
 const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
-scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
+const cavity = new THREE.Mesh(new THREE.BufferGeometry(), material);
+cavity.name = 'AILayer';
+const mainLayer = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }));
+mainLayer.name = 'MainLayer';
+scene.add(cavity, mainLayer);
+let geometryState;
+
+function updateGeometry() {
+  const { x, y } = uniforms.resolution.value;
+  if (!x || !y) return;
+  const width = x / Math.min(x, y), height = y / Math.min(x, y);
+  const sizeChanged = !geometryState || width !== geometryState.width || height !== geometryState.height;
+  if (sizeChanged || values.depth !== geometryState.depth || values.radius !== geometryState.radius) {
+    cavity.geometry.dispose();
+    cavity.geometry = createCavityGeometry(width, height, values.depth / 100, values.radius / 100);
+  }
+  if (sizeChanged) {
+    mainLayer.geometry.dispose();
+    mainLayer.geometry = createMainLayerGeometry(width, height);
+  }
+  mainLayer.position.y = values.opening / 100 * height;
+  mainLayer.visible = values.opening < 100;
+  geometryState = { width, height, depth: values.depth, radius: values.radius };
+}
 
 let motionCalibrated = false;
 let permissionGranted = typeof window.DeviceOrientationEvent?.requestPermission !== 'function';
@@ -73,8 +100,14 @@ function resize() {
   // Native iPhone Air rendering: 420 × 912 CSS px at DPR 3 -> 1260 × 2736 pixels.
   renderer.setPixelRatio(Math.min(devicePixelRatio, AIR.scale));
   renderer.setSize(box.width, box.height, false);
+  // Fit z=0 exactly to the aperture; tilt only changes lightPosition.
+  const halfHeight = box.height / Math.min(box.width, box.height) * 0.5;
+  camera.aspect = box.width / box.height;
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(halfHeight / cameraDistance));
+  camera.updateProjectionMatrix();
   stage.style.clipPath = screenClip(box.width, box.height);
   renderer.getDrawingBufferSize(uniforms.resolution.value);
+  updateGeometry();
   diagnostics();
   dirty = true;
 }
@@ -111,7 +144,6 @@ function updateControls() {
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
   uniforms.depth.value = values.depth / 100;
-  uniforms.radius.value = values.radius / 100;
   uniforms.lightRadius.value = values.size / 100;
   $('shadows').checked = values.shadows;
   $('mainShadows').checked = values.mainShadows;
@@ -126,6 +158,7 @@ function updateControls() {
   const r = values.radius * 1.7;
   $('profile').setAttribute('d', `M16 18 V${18+d-r} A${r} ${r} 0 0 0 ${16+r} ${18+d} H${284-r} A${r} ${r} 0 0 0 284 ${18+d-r} V18`);
   $('dimensions').textContent = `D ${values.depth}%  /  R ${values.radius}%`;
+  updateGeometry();
   dirty = true;
 }
 function saveControls(replace = false) {

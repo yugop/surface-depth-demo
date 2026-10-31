@@ -75,7 +75,8 @@ export const CORNER_PROFILE = [
 ];
 export const MAX_FLOOR_RADIUS = Math.floor((0.5 - CORNER_EXTENT) * 400) / 4;
 
-function cornerValue(delta) {
+export function cornerCurve(delta) {
+  if (Math.abs(delta) >= CORNER_EXTENT) return [Math.abs(delta) / 2, Math.sign(delta) / 2];
   const segments = CORNER_PROFILE.length - 1;
   const step = CORNER_EXTENT / segments;
   const position = Math.abs(delta) / step;
@@ -86,25 +87,29 @@ function cornerValue(delta) {
   const c = step * da;
   const e = 3 * (b - a) - step * (2 * da + db);
   const f = 2 * (a - b) + step * (da + db);
-  return a + t * (c + t * (e + t * f));
+  return [a + t * (c + t * (e + t * f)),
+    Math.sign(delta) * (c + t * (2 * e + 3 * t * f)) / step];
 }
 
-// Use the shader's contour for the CSS silhouette too; avoid a second circular mask.
-export function screenClip(width, height) {
+// Clockwise outline in screen coordinates, shared by meshes and the CSS mask.
+export function screenOutline(width, height) {
   const short = Math.min(width, height);
   const corner = [];
   const segments = (CORNER_PROFILE.length - 1) * 2;
   for (let i = 0; i <= segments; i++) {
     const delta = CORNER_EXTENT * (2 * i / segments - 1);
-    const mean = cornerValue(delta);
+    const [mean] = cornerCurve(delta);
     corner.push([(mean + delta / 2) * short, (mean - delta / 2) * short]);
   }
   const reversed = [...corner].reverse();
-  const points = [
+  return [
     ...corner,
     ...reversed.map(([x, y]) => [width - x, y]),
     ...corner.map(([x, y]) => [width - x, height - y]),
     ...reversed.map(([x, y]) => [x, height - y]),
   ];
-  return `polygon(${points.map(([x, y]) => `${x.toFixed(4)}px ${y.toFixed(4)}px`).join(',')})`;
+}
+
+export function screenClip(width, height) {
+  return `polygon(${screenOutline(width, height).map(([x, y]) => `${x.toFixed(4)}px ${y.toFixed(4)}px`).join(',')})`;
 }
