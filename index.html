@@ -22,6 +22,8 @@
       <svg id="section" viewBox="0 0 300 100" role="img" aria-label="側壁と底面の断面図"><path id="profile"/><path class="datum" d="M16 18 H284"/><text x="150" y="12" text-anchor="middle">開口面</text><text id="dimensions" x="150" y="94" text-anchor="middle"></text></svg>
       <label>凹みの深さ <output id="depthValue"></output><input id="depth" type="range" min="1" max="30" value="20" step="0.5"></label>
       <label>底の角のR <output id="radiusValue"></output><input id="radius" type="range" min="0" max="20" value="20" step="0.25"></label>
+      <label>カメラの画角（縦） <output id="fovValue"></output><input id="fov" type="range" min="20" max="120" value="82" step="1"></label>
+      <p class="footnote">開口面は画面にフィットしたまま、画角が大きいほど遠近感が強くなります。</p>
     </details>
     <details class="settings-group" name="settings">
       <summary>光と影</summary>

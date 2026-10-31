@@ -4,7 +4,7 @@
 
 `geometry.js`が側壁・底面の`BufferGeometry`と、白いMainLayerの平面メッシュを生成する。Three.jsの標準の透視投影・深度テストで面を描き、AILayerの`ShaderMaterial`はメッシュから受け取った表面位置・法線を使って光・影・反射を計算する。MainLayerは照明を受けない白い`MeshBasicMaterial`を使う。
 
-`PerspectiveCamera`を開口中央の正面、画面短辺の1.25倍の距離に固定する。リサイズ時にz=0の開口が画面へ一致する画角を計算する。カメラ・凹みの相対位置は端末姿勢で変えず、姿勢のQuaternionは光源だけに適用する。底面の投影倍率は`C/(C+D)`（Cはカメラ距離）で、初期深さ20%では約86%となる。
+`PerspectiveCamera`を開口中央の正面に置く。保存する画角は縦画角で、`updateCamera`が開口の高さHと画角θから距離`C=(H/2)/tan(θ/2)`を求める。画角変更時とリサイズ時に距離・アスペクト比・投影行列を更新し、z=0の開口面を描画領域へ一致させる。farも距離に連動させ、狭い画角でも底面をクリップしない。カメラ・凹みの相対位置は端末姿勢で変えず、姿勢のQuaternionは光源だけに適用する。底面の投影倍率は`C/(C+D)`で、画角を広げるほど遠近感が強まる。画角変更ではメッシュを再生成しない。
 
 座標の単位は画面短辺。開口面はz=0、底面はz=-D。iPhone Airの解像度は[Apple公式仕様](https://www.apple.com/jp/iphone-air/specs/)の1260×2736 pxを使用する。開口部は単一円弧ではなく、[Apple寸法図](https://developer.apple.com/download/files/accessories/dimensional-drawings/iphone-air.pdf)のシート1「DISPLAY ACTIVE AREA」（69.55×151.03 mm）の輪郭を使用する。筐体やガラスの外周とは区別する。
 

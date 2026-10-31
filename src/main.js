@@ -6,8 +6,8 @@ import { createCavityGeometry, createMainLayerGeometry } from './geometry.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
-const defaults = { opening: 50, depth: 20, radius: 20, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'roughness'];
+const defaults = { opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'roughness'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
 }]));
@@ -26,8 +26,6 @@ try {
   throw new Error('WebGL 2 unavailable');
 }
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// Fixed to the aperture: distances are measured in screen-short-side units.
-const cameraDistance = 1.25;
 const uniforms = {
   resolution: { value: new THREE.Vector2() }, depth: { value: defaults.depth / 100 },
   lightPosition: { value: new THREE.Vector3() }, lightRadius: { value: .18 },
@@ -38,8 +36,7 @@ const uniforms = {
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10);
-camera.position.z = cameraDistance;
+const camera = new THREE.PerspectiveCamera(values.fov, 1, 0.01, 10);
 const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
 const cavity = new THREE.Mesh(new THREE.BufferGeometry(), material);
 cavity.name = 'AILayer';
@@ -47,6 +44,18 @@ const mainLayer = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasic
 mainLayer.name = 'MainLayer';
 scene.add(cavity, mainLayer);
 let geometryState;
+
+function updateCamera() {
+  const { x, y } = uniforms.resolution.value;
+  if (!x || !y) return;
+  const halfHeight = y / Math.min(x, y) * 0.5;
+  camera.aspect = x / y;
+  camera.fov = values.fov;
+  // Keep the aperture at z=0 fitted while changing perspective strength.
+  camera.position.z = halfHeight / Math.tan(THREE.MathUtils.degToRad(values.fov) / 2);
+  camera.far = camera.position.z + 1;
+  camera.updateProjectionMatrix();
+}
 
 function updateGeometry() {
   const { x, y } = uniforms.resolution.value;
@@ -100,13 +109,9 @@ function resize() {
   // Native iPhone Air rendering: 420 × 912 CSS px at DPR 3 -> 1260 × 2736 pixels.
   renderer.setPixelRatio(Math.min(devicePixelRatio, AIR.scale));
   renderer.setSize(box.width, box.height, false);
-  // Fit z=0 exactly to the aperture; tilt only changes lightPosition.
-  const halfHeight = box.height / Math.min(box.width, box.height) * 0.5;
-  camera.aspect = box.width / box.height;
-  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(halfHeight / cameraDistance));
-  camera.updateProjectionMatrix();
   stage.style.clipPath = screenClip(box.width, box.height);
   renderer.getDrawingBufferSize(uniforms.resolution.value);
+  updateCamera();
   updateGeometry();
   diagnostics();
   dirty = true;
@@ -139,7 +144,7 @@ function updateControls() {
   $('radius').max = Math.min(values.depth, MAX_FLOOR_RADIUS);
   for (const key of sliderKeys) {
     $(key).value = values[key];
-    $(`${key}Value`).textContent = `${values[key]}${key === 'azimuth' || key === 'elevation' ? '°' : '%'}`;
+    $(`${key}Value`).textContent = `${values[key]}${['fov', 'azimuth', 'elevation'].includes(key) ? '°' : '%'}`;
   }
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
@@ -158,6 +163,7 @@ function updateControls() {
   const r = values.radius * 1.7;
   $('profile').setAttribute('d', `M16 18 V${18+d-r} A${r} ${r} 0 0 0 ${16+r} ${18+d} H${284-r} A${r} ${r} 0 0 0 284 ${18+d-r} V18`);
   $('dimensions').textContent = `D ${values.depth}%  /  R ${values.radius}%`;
+  updateCamera();
   updateGeometry();
   dirty = true;
 }
