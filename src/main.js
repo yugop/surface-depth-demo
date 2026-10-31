@@ -4,14 +4,14 @@ import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
-const defaults = { opening: 50, depth: 20, radius: 20, azimuth: 0, elevation: 60, size: 18, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'azimuth', 'elevation', 'size'];
+const defaults = { opening: 50, depth: 20, radius: 20, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'roughness'];
 const values = { ...defaults };
 const stage = $('stage');
 document.documentElement.style.setProperty('--screen-aspect', AIR.width / AIR.height);
 const standaloneMode = matchMedia('(display-mode: standalone)');
 const isStandalone = () => standaloneMode.matches || navigator.standalone === true;
-const status = (text) => { $('status').textContent = text; };
+const status = (text) => { $('status').textContent = text; $('hint').textContent = text; };
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas: $('view'), antialias: false, powerPreference: 'high-performance' });
@@ -26,6 +26,8 @@ const uniforms = {
   lightPosition: { value: new THREE.Vector3() }, lightRadius: { value: .18 },
   shadows: { value: defaults.shadows }, baseColor: { value: new THREE.Color(defaults.baseColor) },
   opening: { value: defaults.opening / 100 }, mainShadows: { value: defaults.mainShadows },
+  brightness: { value: defaults.brightness / 100 }, ambient: { value: defaults.ambient / 100 },
+  specularStrength: { value: defaults.specular / 100 }, roughness: { value: defaults.roughness / 100 },
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
@@ -33,9 +35,13 @@ const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader });
 scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material));
 
-let motionEnabled = false;
+let motionEnabled = true;
+let motionCalibrated = false;
+let permissionGranted = typeof window.DeviceOrientationEvent?.requestPermission !== 'function';
+let permissionPending = false;
+let permissionGeneration = 0;
 let hasReading = false;
-let pendingCalibration = false;
+let pendingCalibration = true;
 const orientation = new THREE.Quaternion();
 const baseline = new THREE.Quaternion();
 const relative = new THREE.Quaternion();
@@ -80,6 +86,7 @@ function setPanel(open) {
   $('settings').hidden = open;
   $('settings').setAttribute('aria-expanded', String(open));
   (open ? $('close') : $('settings')).focus();
+  updateMotionUI();
   if (open) diagnostics();
 }
 $('settings').onclick = () => setPanel(true);
@@ -93,6 +100,8 @@ function updateControls() {
     $(key).value = values[key];
     $(`${key}Value`).textContent = `${values[key]}${key === 'azimuth' || key === 'elevation' ? '°' : '%'}`;
   }
+  for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
+  uniforms.specularStrength.value = values.specular / 100;
   uniforms.depth.value = values.depth / 100;
   uniforms.radius.value = values.radius / 100;
   uniforms.lightRadius.value = values.size / 100;
@@ -111,12 +120,27 @@ function updateControls() {
   $('dimensions').textContent = `D ${values.depth}%  /  R ${values.radius}%`;
   dirty = true;
 }
+function updateMotionUI() {
+  $('motion').checked = motionEnabled;
+  $('calibrate').disabled = !motionEnabled || permissionPending;
+  $('hint').hidden = !motionEnabled || motionCalibrated || !$('panel').hidden;
+}
 function stopMotion(message = '光源の向きを固定しています。') {
   motionEnabled = false;
+  motionCalibrated = false;
   pendingCalibration = false;
-  $('motion').textContent = '傾きを使う';
-  $('calibrate').disabled = true;
+  permissionGeneration++;
   status(message);
+  updateMotionUI();
+  dirty = true;
+}
+function enableMotion() {
+  motionEnabled = true;
+  motionCalibrated = false;
+  pendingCalibration = true;
+  if (permissionGranted && hasReading) calibrate();
+  else status('画面をタップすると、その姿勢を基準に傾きを使います。');
+  updateMotionUI();
   dirty = true;
 }
 for (const key of sliderKeys) {
@@ -146,53 +170,78 @@ window.addEventListener('deviceorientation', (event) => {
   screenRotation.setFromAxisAngle(zAxis, -rad(screen.orientation?.angle ?? window.orientation ?? 0));
   orientation.multiply(screenRotation);
   hasReading = true;
-  if (pendingCalibration && motionEnabled) calibrate();
+  if (pendingCalibration && motionEnabled && permissionGranted) calibrate();
   if (motionEnabled) dirty = true;
 });
 function calibrate() {
   baseline.copy(orientation);
+  relative.identity();
   smoothed.identity();
+  motionCalibrated = true;
   pendingCalibration = false;
-  status('この姿勢を基準にしました。端末をゆっくり傾けてください。');
+  status('この姿勢を基準にしました。画面タップで基準を取り直せます。');
+  updateMotionUI();
   dirty = true;
 }
-$('calibrate').onclick = () => { if (hasReading) calibrate(); };
-$('motion').onclick = async () => {
-  if (motionEnabled) { stopMotion(); return; }
-  if (!window.isSecureContext) { status('傾き操作にはHTTPSで開いてください。手動操作は使えます。'); return; }
-  if (!window.DeviceOrientationEvent) { status('この環境では傾きを取得できません。手動で調整できます。'); return; }
-  try {
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-      const result = await DeviceOrientationEvent.requestPermission();
-      if (result !== 'granted') { status('傾きの利用が許可されていません。手動で調整できます。'); return; }
-    }
-    motionEnabled = true;
-    $('motion').textContent = '傾きを止める';
-    $('calibrate').disabled = false;
+// Call directly from a click so Safari retains the user activation for permission.
+async function useTiltAtTap() {
+  if (!motionEnabled || permissionPending) return;
+  if (!window.isSecureContext) { status('傾き操作はHTTPSで開いてください。'); return; }
+  if (!window.DeviceOrientationEvent) { status('この環境では傾きを取得できません。設定で光源を調整できます。'); return; }
+  if (permissionGranted) {
     if (hasReading) calibrate();
-    else { pendingCalibration = true; status('傾きデータを待っています。届いた姿勢を基準にします。'); }
-  } catch {
-    status('傾きを有効にできませんでした。Safariの設定を確認するか、手動で調整してください。');
+    else { pendingCalibration = true; status('傾きデータを待っています。最初に届いた姿勢を基準にします。'); }
+    return;
   }
+  const generation = permissionGeneration;
+  permissionPending = true;
+  updateMotionUI();
+  try {
+    const result = await DeviceOrientationEvent.requestPermission();
+    permissionGranted = result === 'granted';
+    if (generation !== permissionGeneration || !motionEnabled) return;
+    if (!permissionGranted) {
+      pendingCalibration = false;
+      status('傾きが許可されていません。画面タップで再試行するか、設定で光源を調整してください。');
+    } else if (hasReading) calibrate();
+    else { pendingCalibration = true; status('許可しました。最初に届く姿勢を基準にします。'); }
+  } catch {
+    if (generation === permissionGeneration && motionEnabled) status('傾きを有効にできませんでした。画面をタップして再試行してください。');
+  } finally {
+    permissionPending = false;
+    updateMotionUI();
+  }
+}
+$('calibrate').onclick = useTiltAtTap;
+$('motion').onchange = () => {
+  if ($('motion').checked) { enableMotion(); useTiltAtTap(); }
+  else stopMotion();
 };
 $('reset').onclick = () => {
   Object.assign(values, defaults);
-  stopMotion('初期値に戻しました。');
+  permissionGeneration++;
+  enableMotion();
   updateControls();
 };
 let drag;
+let dragged = false;
 stage.addEventListener('pointerdown', (event) => {
-  drag = { x: event.clientX, y: event.clientY, azimuth: values.azimuth, elevation: values.elevation };
+  if (!event.isPrimary) return;
+  dragged = false;
+  drag = { id: event.pointerId, x: event.clientX, y: event.clientY, azimuth: values.azimuth, elevation: values.elevation };
   stage.setPointerCapture(event.pointerId);
-  stopMotion();
 });
 stage.addEventListener('pointermove', (event) => {
-  if (!drag) return;
+  if (!drag || event.pointerId !== drag.id) return;
+  if (!dragged && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 8) return;
+  if (!dragged) { dragged = true; stopMotion(); }
   values.azimuth = Math.round(THREE.MathUtils.clamp(drag.azimuth + (event.clientX - drag.x) * .5, -180, 180));
   values.elevation = Math.round(THREE.MathUtils.clamp(drag.elevation - (event.clientY - drag.y) * .3, 15, 90));
   updateControls();
 });
-for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) stage.addEventListener(name, () => { drag = null; });
+stage.addEventListener('click', () => { if (!dragged) useTiltAtTap(); });
+stage.addEventListener('pointercancel', () => { dragged = true; drag = null; });
+for (const name of ['pointerup', 'lostpointercapture']) stage.addEventListener(name, () => { drag = null; });
 
 renderer.setAnimationLoop((time) => {
   const dt = Math.min((time - lastTime) / 1000, .1);
@@ -204,7 +253,7 @@ renderer.setAnimationLoop((time) => {
     fpsStart = time;
     if (!$('panel').hidden) diagnostics();
   }
-  if (motionEnabled && hasReading) {
+  if (motionEnabled && hasReading && motionCalibrated) {
     // Q_current^-1 Q_baseline maps the fixed world light into the current phone frame.
     relative.copy(orientation).invert().multiply(baseline);
     smoothed.slerp(relative, 1 - Math.exp(-dt * 12));
@@ -215,10 +264,11 @@ renderer.setAnimationLoop((time) => {
   const el = THREE.MathUtils.degToRad(values.elevation);
   baseLight.set(Math.sin(az)*Math.cos(el), Math.cos(az)*Math.cos(el), Math.sin(el)).multiplyScalar(2);
   targetLight.copy(baseLight);
-  if (motionEnabled && hasReading) targetLight.applyQuaternion(smoothed);
+  if (motionEnabled && hasReading && motionCalibrated) targetLight.applyQuaternion(smoothed);
   uniforms.lightPosition.value.copy(targetLight);
   renderer.render(scene, camera);
   dirty = false;
 });
+enableMotion();
 updateControls();
 resize();

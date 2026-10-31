@@ -17,6 +17,10 @@ uniform bool shadows;
 uniform bool mainShadows;
 uniform float opening;
 uniform vec3 baseColor;
+uniform float brightness;
+uniform float ambient;
+uniform float specularStrength;
+uniform float roughness;
 uniform vec2 cornerProfile[${CORNER_PROFILE.length}];
 const float CORNER_EXTENT = ${CORNER_EXTENT};
 const float PROFILE_SEGMENTS = ${CORNER_PROFILE.length - 1}.0;
@@ -53,6 +57,10 @@ vec3 mainInset(vec2 p) {
   vec2 halfSize = resolution / min(resolution.x, resolution.y) * 0.5;
   return profileInset(p - vec2(0.0, opening * halfSize.y * 2.0), halfSize);
 }
+// Avoid an undefined tangent when tilt aligns the light with the Y axis.
+vec3 lightTangent(vec3 forward) {
+  return normalize(cross(forward, abs(forward.y) > 0.99 ? vec3(1,0,0) : vec3(0,1,0)));
+}
 // Locally project a disk light onto the sheet. Integrating its circular segment
 // gives a continuous penumbra without a visible finite-sample staircase.
 float mainVisibility(vec3 surface, vec3 forward, float aa) {
@@ -61,7 +69,7 @@ float mainVisibility(vec3 surface, vec3 forward, float aa) {
   if (lightPosition.z <= 0.0) return 1.0;
   float t = -surface.z / max(ray.z, 0.00001);
   vec3 edge = mainInset(surface.xy + ray.xy * t);
-  vec3 tangent = normalize(cross(forward, vec3(0,1,0)));
+  vec3 tangent = lightTangent(forward);
   vec3 bitangent = cross(forward, tangent);
   vec3 projection = vec3(edge.yz, -dot(edge.yz, ray.xy) / max(ray.z, 0.00001));
   float width = max(aa, t * lightRadius * length(vec2(dot(projection, tangent), dot(projection, bitangent))));
@@ -74,6 +82,23 @@ float floorDepth(float inset) {
   if (radius < 0.00001 || inset >= radius) return depth;
   float x = max(radius - inset, 0.0);
   return depth - radius + sqrt(max(radius * radius - x * x, 0.0));
+}
+// Dielectric GGX reflection with a fixed orthographic view direction.
+float reflection(vec3 normal, vec3 light) {
+  float nl = max(dot(normal, light), 0.0);
+  float nv = max(normal.z, 0.0);
+  if (nl <= 0.0 || nv <= 0.0 || light.z <= -0.99999) return 0.0;
+  vec3 halfVector = normalize(light + vec3(0,0,1));
+  float nh = max(dot(normal, halfVector), 0.0);
+  float vh = max(halfVector.z, 0.0);
+  float alpha = max(roughness * roughness, 0.0025);
+  float a2 = alpha * alpha;
+  float d = nh * nh * (a2 - 1.0) + 1.0;
+  float distribution = a2 / max(3.14159265359 * d * d, 0.0000001);
+  float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+  float geometry = (nl / (nl * (1.0-k) + k)) * (nv / (nv * (1.0-k) + k));
+  float fresnel = 0.04 + 0.96 * pow(1.0-vh, 5.0);
+  return distribution * geometry * fresnel / max(4.0 * nv, 0.00001);
 }
 void main() {
   vec2 p = (vUv - 0.5) * resolution / min(resolution.x, resolution.y);
@@ -93,10 +118,12 @@ void main() {
   vec3 forward = normalize(lightPosition);
   // Shadow-off comparison uses only the normal and a uniform light direction.
   float illumination = max(dot(normal, forward), 0.0);
+  float specular = reflection(normal, forward);
   if (shadows) {
-  vec3 tangent = normalize(cross(forward, vec3(0,1,0)));
+  vec3 tangent = lightTangent(forward);
   vec3 bitangent = cross(forward, tangent);
   illumination = 0.0;
+  specular = 0.0;
   float reference = 0.0;
   // Convex cavity: a ray is unoccluded exactly when its exit at z=0 is in the aperture.
   // Fixed disk samples avoid temporal noise and motion trails.
@@ -112,14 +139,17 @@ void main() {
       float visible = smoothstep(-aa, aa, aperture(exitPoint));
       float dist2 = dot(ray,ray);
       illumination += visible * max(dot(normal, normalize(ray)), 0.0) / dist2;
+      specular += visible * reflection(normal, normalize(ray)) / dist2;
     }
     vec3 refRay = source - vec3(0,0,-depth);
     reference += max(normalize(refRay).z, 0.0) / dot(refRay,refRay);
   }
   illumination /= max(reference, 0.0001);
+  specular /= max(reference, 0.0001);
   }
-  illumination *= mainVisibility(surface, forward, aa);
-  vec3 color = baseColor * (0.11 + illumination * 0.88);
+  float visibility = mainVisibility(surface, forward, aa);
+  vec3 color = baseColor * (ambient + illumination * brightness * visibility)
+             + vec3(specular * specularStrength * brightness * visibility);
   color = mix(color, vec3(1.0), mainCoverage);
   gl_FragColor = vec4(color,1.0);
   #include <tonemapping_fragment>

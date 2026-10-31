@@ -27,9 +27,10 @@ input { display: block; width: 100%; margin: 5px 0 0; accent-color: #60705c; min
 .toggle input { width: 22px; height: 22px; margin: 0; }
 input[type="color"] { height: 44px; padding: 3px; border: 1px solid #7776; border-radius: 8px; background: transparent; }
 input:disabled { opacity: .4; }
-.rule { border-top: 1px solid #b5b7aa60; margin: 18px 0; }
-.actions { display: flex; gap: 8px; margin-top: 18px; }
-.actions button { flex: 1; padding: 8px; font-size: 12px; }
+.settings-group { border-top: 1px solid #b5b7aa60; margin-top: 10px; color: inherit; font-size: 12px; }
+.settings-group > summary { cursor: pointer; padding: 14px 0; min-height: 44px; font-weight: 500; }
+.settings-group[open] > summary { color: #476756; }
+#hint { position: fixed; bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 48px); margin: 0; padding: 8px 12px; border-radius: 12px; color: #fff; background: #252724d9; pointer-events: none; text-align: center; }
 .quiet { display: block; margin: 10px auto 0; border: 0; background: transparent; font-size: 12px; color: #757b6b; }
 p { line-height: 1.65; font-size: 11px; }
 #status { color: #516448; }
