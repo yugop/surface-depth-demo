@@ -45,7 +45,7 @@
       <summary>素材</summary>
       <label>表面の素材<select id="surfaceMaterial"></select></label>
       <label>模様の繰り返し <output id="materialScaleValue"></output><input id="materialScale" type="range" min="0.25" max="8" value="1" step="0.25"></label>
-      <p class="footnote">画像素材は元の色を使います。粗さ65%が素材の基準で、上下に調整できます。</p>
+      <p class="footnote">画像素材の元の色にグラデーションを掛けられます。粗さ65%が素材の基準で、上下に調整できます。</p>
       <p id="materialState" class="footnote" role="status"></p>
       <label>ベース色（単色） <output id="baseColorValue"></output><input id="baseColor" type="color" value="#5c5c5c"></label>
       <label>光源の反射 <output id="specularValue"></output><input id="specular" type="range" min="0" max="100" value="20" step="1"></label>
@@ -57,6 +57,20 @@
       <label>表面の粗さ <output id="roughnessValue"></output><input id="roughness" type="range" min="5" max="100" value="65" step="1"></label>
       <p class="footnote">光源の反射と環境の映り込みは個別に調整できます。粗さが小さいほどくっきり映り、大きいほどぼやけます。MainLayerは白いままです。</p>
       <p id="environmentState" class="footnote" role="status">環境を読み込み中です。</p>
+    </details>
+    <details class="settings-group" name="settings">
+      <summary>グラデーション</summary>
+      <label>色の強さ <output id="gradientStrengthValue"></output><input id="gradientStrength" type="range" min="0" max="100" value="75" step="1"></label>
+      <label>分布の大きさ <output id="gradientSizeValue"></output><input id="gradientSize" type="range" min="25" max="300" value="100" step="5"></label>
+      <label>変化速度 <output id="gradientSpeedValue"></output><input id="gradientSpeed" type="range" min="0" max="200" value="30" step="1"></label>
+      <div id="gradientPreview" class="gradient-preview" role="img" aria-label="グラデーションの配色"></div>
+      <div class="gradient-colors">
+        <label>色1 <output id="gradientColor0Value"></output><input id="gradientColor0" type="color" value="#11004b"></label>
+        <label>色2 <output id="gradientColor1Value"></output><input id="gradientColor1" type="color" value="#1d58ec"></label>
+        <label>色3 <output id="gradientColor2Value"></output><input id="gradientColor2" type="color" value="#6ecbfc"></label>
+        <label>色4 <output id="gradientColor3Value"></output><input id="gradientColor3" type="color" value="#fdffcb"></label>
+      </div>
+      <p class="footnote">素材の質感を保って表面を着色します。強さ0%で元の素材色、速度0%で静止します。分布の大きさは画面短辺基準で、素材の模様とは独立しています。</p>
     </details>
     <details class="settings-group" name="settings">
       <summary>操作</summary>

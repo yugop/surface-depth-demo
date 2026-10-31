@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ENVIRONMENTS, createEnvironmentController } from './environments.js';
 import { MATERIALS, createMaterialController } from './materials.js';
+import { createGradientController } from './gradient.js';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -18,8 +19,9 @@ for (const entry of MATERIALS) {
   option.value = entry.id; option.textContent = entry.label;
   $('surfaceMaterial').append(option);
 }
-const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, plateHorizontalScale: 1, projection: 'perspective', fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, surfaceMaterial: 'solid', materialScale: 1, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'plateHorizontalScale', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness', 'materialScale'];
+const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, plateHorizontalScale: 1, projection: 'perspective', fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, surfaceMaterial: 'solid', materialScale: 1, gradientStrength: 75, gradientSize: 100, gradientSpeed: 30, gradientColor0: '#11004b', gradientColor1: '#1d58ec', gradientColor2: '#6ecbfc', gradientColor3: '#fdffcb', shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'plateHorizontalScale', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness', 'materialScale', 'gradientStrength', 'gradientSize', 'gradientSpeed'];
+const gradientColorKeys = ['gradientColor0', 'gradientColor1', 'gradientColor2', 'gradientColor3'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
 }]));
@@ -54,6 +56,9 @@ const uniforms = {
   orthographicView: { value: false },
   materialColorMap: { value: null }, materialNormalMap: { value: null },
   materialRoughnessMap: { value: null }, materialMetalnessMap: { value: null }, materialOcclusionMap: { value: null },
+  gradientMap: { value: null }, gradientExtent: { value: new THREE.Vector2(1, 1) },
+  gradientTime: { value: 0 }, gradientSize: { value: 1 }, gradientStrength: { value: 0 },
+  ...Object.fromEntries(gradientColorKeys.map(key => [key, { value: new THREE.Color(defaults[key]) }])),
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
@@ -129,6 +134,7 @@ let lastTime = performance.now();
 let fpsStart = lastTime;
 let measuredFps = '—';
 
+const gradientController = createGradientController(renderer, uniforms);
 const materialController = createMaterialController(renderer, uniforms, message => {
   $('materialState').textContent = message;
   dirty = true;
@@ -158,6 +164,7 @@ function resize() {
   renderer.setSize(box.width, box.height, false);
   stage.style.clipPath = screenClip(box.width, box.height);
   renderer.getDrawingBufferSize(uniforms.resolution.value);
+  gradientController.resize(uniforms.resolution.value.x, uniforms.resolution.value.y);
   updateCamera();
   updateGeometry();
   diagnostics();
@@ -209,6 +216,14 @@ function updateControls() {
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
   uniforms.materialScale.value = values.materialScale;
+  uniforms.gradientStrength.value = values.gradientStrength / 100;
+  uniforms.gradientSize.value = values.gradientSize / 100;
+  for (const key of gradientColorKeys) {
+    $(key).value = values[key];
+    $(`${key}Value`).textContent = values[key].toUpperCase();
+    uniforms[key].value.set(values[key]);
+  }
+  $('gradientPreview').style.background = `linear-gradient(90deg, ${values.gradientColor0} 0%, ${values.gradientColor1} 26.47%, ${values.gradientColor2} 64.9%, ${values.gradientColor3} 100%)`;
   uniforms.environmentStrength.value = values.environment / 100;
   uniforms.depth.value = values.depth / 100;
   uniforms.lightRadius.value = values.size / 100;
@@ -249,6 +264,12 @@ function initializeCalibration() {
 for (const key of sliderKeys) {
   $(key).addEventListener('input', () => {
     values[key] = Number($(key).value);
+    saveControls();
+  });
+}
+for (const key of gradientColorKeys) {
+  $(key).addEventListener('input', () => {
+    values[key] = $(key).value;
     saveControls();
   });
 }
@@ -359,6 +380,7 @@ async function startTilt() {
 $('calibrate').onclick = useTiltAtTap;
 $('reset').onclick = () => {
   Object.assign(values, defaults);
+  uniforms.gradientTime.value = 0;
   initializeCalibration();
   saveControls(true);
   materialController.select(values.surfaceMaterial);
@@ -389,6 +411,9 @@ stage.addEventListener('lostpointercapture', () => { drag = null; });
 renderer.setAnimationLoop((time) => {
   const dt = Math.min((time - lastTime) / 1000, .1);
   lastTime = time;
+  // Accumulate phase so changing speed or pausing never jumps the color field.
+  uniforms.gradientTime.value += dt * values.gradientSpeed / 100;
+  if (values.gradientStrength > 0 && values.gradientSpeed > 0) dirty = true;
   frames++;
   if (time - fpsStart > 1500) {
     measuredFps = Math.round(frames * 1000 / (time - fpsStart));
@@ -419,6 +444,7 @@ renderer.setAnimationLoop((time) => {
     inverseEnvironmentRotation.setFromMatrix4(environmentTransform).transpose();
     uniforms.environmentRotation.value.multiply(inverseEnvironmentRotation);
   }
+  if (values.gradientStrength > 0) gradientController.render();
   renderer.render(scene, camera);
   dirty = false;
 });

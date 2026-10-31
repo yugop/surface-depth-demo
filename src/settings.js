@@ -29,7 +29,7 @@ export function loadSettings(defaults, ranges, getStorage = () => globalThis.loc
         values[key] = value;
       } else if (key === 'environmentSource' && ENVIRONMENTS.some(entry => entry.id === value)) {
         values[key] = value;
-      } else if (key === 'baseColor' && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) {
+      } else if ((key === 'baseColor' || /^gradientColor[0-3]$/.test(key)) && typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)) {
         values[key] = value;
       }
     }

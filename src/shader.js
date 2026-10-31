@@ -30,6 +30,9 @@ uniform float roughness;
 uniform bool orthographicView;
 uniform bool materialReady;
 uniform float materialScale;
+uniform sampler2D gradientMap;
+uniform vec2 gradientExtent;
+uniform float gradientStrength;
 uniform sampler2D materialColorMap;
 uniform sampler2D materialNormalMap;
 uniform sampler2D materialRoughnessMap;
@@ -181,6 +184,10 @@ void main() {
     normal = normalize(mappedNormal(surface, normal, uvX) * weights.x
                      + mappedNormal(surface, normal, uvY) * weights.y
                      + mappedNormal(surface, normal, uvZ) * weights.z);
+  }
+  if (gradientStrength > 0.0) {
+    vec3 tone = texture2D(gradientMap, surface.xy / gradientExtent + .5).rgb;
+    albedo *= mix(vec3(1.0), tone, gradientStrength);
   }
   vec3 f0 = mix(vec3(0.04), albedo, metalness);
   float z = -surface.z;
