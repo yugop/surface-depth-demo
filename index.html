@@ -44,14 +44,15 @@
     <details class="settings-group" name="settings">
       <summary>操作</summary>
       <button id="calibrate">今の姿勢を基準に</button>
-      <p class="footnote">傾きは常にONです。タップ時・ドラッグ終了時の姿勢を新しい基準にし、その後も連動を続けます。初回はセンサーの利用許可が必要な場合があります。</p>
+      <p class="footnote">傾きは常にONです。タップ時・ドラッグ終了時の姿勢を新しい基準にし、その後も連動を続けます。起動時にセンサーの利用許可を確認します。Safariが画面操作を要求した場合はタップしてください。</p>
       <p id="diagnostics"></p>
       <p class="footnote">深さ・R・光源サイズは画面短辺に対する割合。iPhoneではSafariの共有からホーム画面に追加し、追加したアイコンから開いてください。</p>
     </details>
-    <p id="status" role="status">傾きは常にONです。タップ・ドラッグで基準姿勢を更新します。</p>
+    <p id="status" role="status">傾きセンサーに接続しています。</p>
     <button id="reset" class="quiet">初期値に戻す</button>
+    <p id="saveState" class="footnote">設定はこの端末に自動保存されます。</p>
   </section>
-  <p id="hint">傾きは常にONです。タップ・ドラッグで基準姿勢を更新します。</p>
+  <p id="hint">傾きセンサーに接続しています。</p>
   <p id="error" role="alert" hidden></p>
   <script type="module" src="./src/main.js"></script>
 </body>

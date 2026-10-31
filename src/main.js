@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
+import { loadSettings, saveSettings } from './settings.js';
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
 const defaults = { opening: 50, depth: 20, radius: 20, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
 const sliderKeys = ['opening', 'depth', 'radius', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'roughness'];
-const values = { ...defaults };
+const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
+  min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
+}]));
+const values = loadSettings(defaults, ranges);
 const stage = $('stage');
 document.documentElement.style.setProperty('--screen-aspect', AIR.width / AIR.height);
 const standaloneMode = matchMedia('(display-mode: standalone)');
@@ -118,6 +122,12 @@ function updateControls() {
   $('dimensions').textContent = `D ${values.depth}%  /  R ${values.radius}%`;
   dirty = true;
 }
+function saveControls(replace = false) {
+  updateControls();
+  $('saveState').textContent = saveSettings(values, replace)
+    ? '設定はこの端末に自動保存されます。'
+    : 'この環境では設定を保存できません。';
+}
 function updateMotionUI() {
   $('calibrate').disabled = permissionPending;
   $('hint').hidden = motionCalibrated || !$('panel').hidden;
@@ -126,27 +136,27 @@ function initializeCalibration() {
   motionCalibrated = false;
   pendingCalibration = true;
   if (permissionGranted && hasReading) calibrate();
-  else status('傾きは常にONです。タップ・ドラッグで基準姿勢を更新します。');
+  else status('傾きセンサーに接続しています。');
   updateMotionUI();
   dirty = true;
 }
 for (const key of sliderKeys) {
   $(key).addEventListener('input', () => {
     values[key] = Number($(key).value);
-    updateControls();
+    saveControls();
   });
 }
 $('shadows').addEventListener('change', () => {
   values.shadows = $('shadows').checked;
-  updateControls();
+  saveControls();
 });
 $('mainShadows').addEventListener('change', () => {
   values.mainShadows = $('mainShadows').checked;
-  updateControls();
+  saveControls();
 });
 $('baseColor').addEventListener('input', () => {
   values.baseColor = $('baseColor').value;
-  updateControls();
+  saveControls();
 });
 window.addEventListener('deviceorientation', (event) => {
   if (event.beta == null || event.gamma == null) return;
@@ -156,6 +166,7 @@ window.addEventListener('deviceorientation', (event) => {
   screenRotation.setFromAxisAngle(zAxis, -rad(screen.orientation?.angle ?? window.orientation ?? 0));
   orientation.multiply(screenRotation);
   hasReading = true;
+  permissionGranted = true;
   if (pendingCalibration && permissionGranted) calibrate();
   dirty = true;
 });
@@ -196,11 +207,32 @@ async function useTiltAtTap() {
     updateMotionUI();
   }
 }
+// A previously granted permission can be resolved without a new user gesture.
+// If Safari requires user activation, the existing tap handler completes the request.
+async function startTilt() {
+  if (!window.isSecureContext) { status('傾き操作はHTTPSで開いてください。'); return; }
+  if (!window.DeviceOrientationEvent) { status('この環境では傾きを取得できません。設定で光源を調整できます。'); return; }
+  if (permissionGranted) return;
+  try {
+    const result = await DeviceOrientationEvent.requestPermission();
+    if (result === 'granted') {
+      permissionGranted = true;
+      if (hasReading && !motionCalibrated) calibrate();
+      else if (!motionCalibrated) status('許可しました。最初に届く姿勢を基準にします。');
+    } else if (!permissionGranted && !motionCalibrated) {
+      status('傾きを使うには利用許可が必要です。画面をタップしてください。');
+    }
+  } catch {
+    if (!permissionGranted && !motionCalibrated && !permissionPending) {
+      status('傾きの利用許可を確認します。画面をタップしてください。');
+    }
+  }
+}
 $('calibrate').onclick = useTiltAtTap;
 $('reset').onclick = () => {
   Object.assign(values, defaults);
   initializeCalibration();
-  updateControls();
+  saveControls(true);
 };
 let drag;
 let dragged = false;
@@ -253,3 +285,4 @@ renderer.setAnimationLoop((time) => {
 initializeCalibration();
 updateControls();
 resize();
+startTilt();
