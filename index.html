@@ -11,7 +11,37 @@
   <title>Surface Depth Demo</title>
 </head>
 <body>
-  <main id="stage" aria-label="凹み空間の光と影"><canvas id="view"></canvas></main>
+  <main id="stage" aria-label="凹み空間の光と影">
+    <canvas id="view"></canvas>
+    <section id="ai-content" class="content-layer" aria-label="AIレイヤー・Thinking2">
+      <div class="content-screen">
+        <div class="booking-progress">
+          <div class="booking-header"><img src="./content/ProgressCircle.png" alt="" width="60" height="60"><span>Preparing booking information ...</span></div>
+          <ol class="booking-steps" aria-label="予約情報の準備状況">
+            <li aria-current="step"><img src="./content/Search.png" alt="" width="22" height="22"><span>Find booking options</span></li>
+            <li class="pending"><img src="./content/Bed.png" alt="" width="22" height="22"><span>Check rooms and rates</span></li>
+            <li class="pending"><img src="./content/FileText.png" alt="" width="22" height="22"><span>Prepare booking details</span></li>
+          </ol>
+        </div>
+        <div class="ai-composer" aria-label="Ask Celia（表示用）"><img src="./content/Attach.png" alt="" width="20" height="20"><span>Ask Celia…</span><img src="./content/Mic.png" alt="" width="20" height="20"></div>
+      </div>
+    </section>
+    <section id="main-content" class="content-layer" aria-label="メインレイヤーの記事">
+      <div class="content-screen">
+        <article class="article-content">
+          <p class="article-kicker">TOKYO STAY JOURNAL</p>
+          <h2 class="article-title">The Okura Tokyo</h2>
+          <p class="article-subtitle">Japanese heritage, in the heart of Tokyo.</p>
+          <img class="article-photo" src="./content/OkuraRoom.png" alt="The Okura Tokyoの客室" width="352" height="230">
+          <h3 class="article-heading">A stay shaped by Japanese design</h3>
+          <p class="article-body article-intro">The Okura Tokyo brings together the Heritage Wing and the Prestige Tower. Traditional Japanese design and contemporary comfort shape two distinct ways to stay, with thoughtful details that invite you to slow down and settle into the city.</p>
+          <h3 class="article-heading article-second-heading">Choose the stay that suits your trip</h3>
+          <p class="article-body article-second-body">Explore rooms, dining and the gardens in Toranomon. Compare the atmosphere of the two wings and imagine how each could fit your trip, from a quiet morning at the hotel to an evening out in Tokyo.</p>
+          <p class="article-body article-last-body">Enjoy breakfast and a local walk before exploring Tokyo. Check rooms and rates for your travel dates.</p>
+        </article>
+      </div>
+    </section>
+  </main>
   <button id="settings" aria-label="調整を開く" aria-expanded="false" aria-controls="panel">調整</button>
   <section id="panel" aria-label="凹みと光の調整" hidden>
     <header><div><span class="eyebrow">SURFACE DEPTH DEMO</span><h1>凹みと光</h1></div><button id="close" aria-label="調整を閉じる">×</button></header>
@@ -19,7 +49,8 @@
       <summary>形状</summary>
       <label>凹みの形<select id="shape"><option value="plate">皿（平らな底）</option><option value="bowl" selected>お椀（全面カーブ）</option></select></label>
       <p class="footnote">皿は平らな底へなだらかにつながり、お椀は中央まで曲面が続きます。Rは皿の丸みの範囲を調整します。</p>
-      <label>MainLayerの開き量 <output id="openingValue"></output><input id="opening" type="range" min="0" max="100" value="50" step="1"></label>
+      <label>MainLayerの開き量 <output id="openingValue"></output><input id="opening" type="range" min="0" max="100" value="36.4" step="0.1"></label>
+      <button id="thinking2" class="quiet">Thinking2の配置に戻す</button>
       <p class="footnote">画面高さに対する上昇量。0%で白い全面、100%でAILayerの全面表示。</p>
       <svg id="section" viewBox="0 0 300 100" role="img" aria-label="側壁と底面の断面図"><path id="profile"/><path class="datum" d="M16 18 H284"/><text x="150" y="12" text-anchor="middle">開口面</text><text id="dimensions" x="150" y="94" text-anchor="middle"></text></svg>
       <label>凹みの深さ <output id="depthValue"></output><input id="depth" type="range" min="1" max="30" value="20" step="0.5"></label>

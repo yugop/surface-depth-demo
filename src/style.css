@@ -6,6 +6,33 @@ html.air-standalone { --air-height: calc(100vw / var(--screen-aspect)); height: 
 html.air-standalone body { height: var(--air-height); }
 html.air-standalone #stage { position: absolute; bottom: auto; height: var(--air-height); }
 #view { display: block; width: 100%; height: 100%; }
+.content-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.content-screen { position: relative; width: 400px; height: 880px; transform-origin: top left; font-family: "Mark Pro", Arial, sans-serif; }
+.content-screen p, .content-screen h2, .content-screen h3 { margin: 0; }
+.article-content { position: absolute; left: 24px; top: 58px; width: 352px; height: 765px; color: #000; }
+.article-content > * { position: absolute; left: 0; width: 352px; }
+.article-content .article-kicker { top: 0; font-size: 12px; line-height: 17.4px; font-weight: 700; }
+.article-title { top: 33px; font-size: 30px; line-height: 43.5px; font-weight: 700; letter-spacing: -.6px; }
+.article-content .article-subtitle { top: 80px; font-size: 16px; line-height: 23.2px; }
+.article-photo { top: 130px; height: 230px; object-fit: cover; }
+.article-heading { top: 388px; font-size: 20px; line-height: 30.45px; letter-spacing: -.8px; font-weight: 700; }
+.article-content .article-body { font-size: 14px; line-height: 22px; }
+.article-intro { top: 430px; }
+.article-second-heading { top: 560px; line-height: 29px; }
+.article-second-body { top: 601px; }
+.article-last-body { top: 727px; }
+.booking-progress { position: absolute; left: 47px; top: 585px; width: 336px; height: 182px; color: #fff; }
+.booking-header { position: relative; height: 52px; }
+.booking-header img { position: absolute; left: -12px; top: -4px; }
+.booking-header span { position: absolute; left: 66px; top: 13px; font-size: 15px; line-height: 26px; font-weight: 500; letter-spacing: -.3px; white-space: nowrap; }
+.booking-steps { position: absolute; top: 82px; left: 0; width: 336px; margin: 0; padding: 0; list-style: none; }
+.booking-steps li { position: relative; height: 22px; margin-bottom: 17px; font-size: 14px; line-height: 20px; }
+.booking-steps img { position: absolute; left: 7px; top: 0; }
+.booking-steps span { position: absolute; left: 66px; top: 1px; white-space: nowrap; }
+.booking-steps li + li::before { content: ""; position: absolute; width: 1px; height: 9px; left: 17.5px; top: -13px; background: #fff; }
+.booking-steps .pending { opacity: .35; }
+.ai-composer { position: absolute; left: 20px; top: 804px; width: 360px; height: 54px; display: flex; align-items: center; gap: 16px; padding: 17px 20px; border-radius: 16px; border: 1px solid #ffffff24; background: #24426190; backdrop-filter: blur(12px); color: #b6c7dd; }
+.ai-composer span { flex: 1; font-size: 15px; line-height: 20px; font-weight: 500; }
 button { font: inherit; color: inherit; cursor: pointer; border: 1px solid #7776; border-radius: 10px; background: #faf9f2c9; padding: 10px 13px; min-height: 44px; touch-action: manipulation; }
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #476756; outline-offset: 3px; }

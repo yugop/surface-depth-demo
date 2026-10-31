@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ENVIRONMENTS, createEnvironmentController } from './environments.js';
 import { MATERIALS, createMaterialController } from './materials.js';
 import { createGradientController } from './gradient.js';
+import { updateContent } from './content.js';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -19,7 +20,7 @@ for (const entry of MATERIALS) {
   option.value = entry.id; option.textContent = entry.label;
   $('surfaceMaterial').append(option);
 }
-const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, plateHorizontalScale: 1, projection: 'perspective', fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, surfaceMaterial: 'solid', materialScale: 1, gradientStrength: 75, gradientSize: 100, gradientSpeed: 30, gradientColor0: '#11004b', gradientColor1: '#1d58ec', gradientColor2: '#6ecbfc', gradientColor3: '#fdffcb', shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const defaults = { contentLayout: 'thinking2', shape: 'bowl', opening: 36.4, depth: 20, radius: 20, plateHorizontalScale: 1, projection: 'perspective', fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, surfaceMaterial: 'solid', materialScale: 1, gradientStrength: 75, gradientSize: 100, gradientSpeed: 30, gradientColor0: '#11004b', gradientColor1: '#1d58ec', gradientColor2: '#6ecbfc', gradientColor3: '#fdffcb', shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
 const sliderKeys = ['opening', 'depth', 'radius', 'plateHorizontalScale', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness', 'materialScale', 'gradientStrength', 'gradientSize', 'gradientSpeed'];
 const gradientColorKeys = ['gradientColor0', 'gradientColor1', 'gradientColor2', 'gradientColor3'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
@@ -108,6 +109,7 @@ function updateGeometry() {
   }
   mainLayer.position.y = values.opening / 100 * height;
   mainLayer.visible = values.opening < 100;
+  updateContent(stage, values.opening);
   geometryState = { width, height, depth: values.depth, radius: values.radius, shape: values.shape, plateHorizontalScale: values.plateHorizontalScale };
 }
 
@@ -184,6 +186,7 @@ function setPanel(open) {
   if (open) diagnostics();
 }
 $('settings').onclick = () => setPanel(true);
+$('thinking2').onclick = () => { values.opening = defaults.opening; saveControls(); };
 $('close').onclick = () => setPanel(false);
 document.addEventListener('click', (event) => {
   if ($('panel').hidden || $('panel').contains(event.target)) return;

@@ -33,6 +33,8 @@ export function loadSettings(defaults, ranges, getStorage = () => globalThis.loc
         values[key] = value;
       }
     }
+    // Apply the new layout once, while preserving the user's material and lighting settings.
+    if (defaults.contentLayout && saved.contentLayout !== defaults.contentLayout) values.opening = defaults.opening;
   } catch { /* Missing or unavailable storage must not prevent rendering. */ }
   return values;
 }
