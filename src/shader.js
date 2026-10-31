@@ -32,6 +32,10 @@ uniform bool environmentReady;
 uniform float environmentStrength;
 uniform float environmentMaxLod;
 uniform mat3 environmentRotation;
+uniform sampler2D cameraMap;
+uniform bool cameraMode;
+uniform float cameraAspect;
+uniform float cameraMaxLod;
 uniform vec2 cornerProfile[${CORNER_PROFILE.length}];
 const float CORNER_EXTENT = ${CORNER_EXTENT};
 const float PROFILE_SEGMENTS = ${CORNER_PROFILE.length - 1}.0;
@@ -106,13 +110,26 @@ float reflection(vec3 normal, vec3 light, vec3 view) {
   float fresnel = 0.04 + 0.96 * pow(1.0-vh, 5.0);
   return distribution * geometry * fresnel / max(4.0 * nv, 0.00001);
 }
+// A front camera covers one forward view, not the full sphere. Fade its edges
+// into the frame average rather than repeating or stretching the image behind us.
+vec3 cameraRadiance(vec3 direction) {
+  vec2 uv = 0.5 + vec2(-direction.x / cameraAspect, direction.y) / (1.15470054 * max(direction.z, 0.05));
+  vec2 outside = max(abs(uv - 0.5) - 0.5, 0.0);
+  float visible = smoothstep(0.0, 0.2, direction.z) * (1.0 - smoothstep(0.0, 0.15, max(outside.x, outside.y)));
+  float lod = cameraMaxLod * roughness * (2.0 - roughness);
+  vec3 frame = sRGBTransferEOTF(textureLod(cameraMap, clamp(uv, 0.0, 1.0), lod)).rgb;
+  vec3 average = sRGBTransferEOTF(textureLod(cameraMap, vec2(0.5), cameraMaxLod)).rgb;
+  return mix(average, frame, visible);
+}
 // GGX-prefiltered radiance with an analytic integrated dielectric BRDF approximation.
 vec3 environmentReflection(vec3 normal, vec3 view) {
   if (!environmentReady || environmentStrength <= 0.0) return vec3(0.0);
   vec3 direction = normalize(mix(reflect(-view, normal), normal, pow(roughness, 4.0)));
   direction = environmentRotation * direction;
   float lod = environmentMaxLod * roughness * (2.0 - roughness);
-  vec3 radiance = textureLod(environmentMap, direction, lod).rgb;
+  vec3 radiance;
+  if (cameraMode) radiance = cameraRadiance(direction);
+  else radiance = textureLod(environmentMap, direction, lod).rgb;
   float nv = max(dot(normal, view), 0.0);
   vec4 r = roughness * vec4(-1.0, -0.0275, -0.572, 0.022) + vec4(1.0, 0.0425, 1.04, -0.04);
   float a004 = min(r.x * r.x, exp2(-9.28 * nv)) * r.x + r.y;

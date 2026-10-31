@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
+import { ENVIRONMENTS, createEnvironmentController } from './environments.js';
 import { vertexShader, fragmentShader } from './shader.js';
 import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.js';
 import { loadSettings, saveSettings } from './settings.js';
@@ -7,8 +7,13 @@ import { cavitySection, createCavityGeometry, createMainLayerGeometry } from './
 import './style.css';
 
 const $ = (id) => document.getElementById(id);
-const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
-const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'roughness'];
+for (const entry of ENVIRONMENTS) {
+  const option = document.createElement('option');
+  option.value = entry.id; option.textContent = entry.label;
+  $('environmentSource').append(option);
+}
+const defaults = { shape: 'bowl', opening: 50, depth: 20, radius: 20, fov: 82, azimuth: 0, elevation: 60, size: 18, brightness: 88, ambient: 11, specular: 20, environment: 100, environmentSource: ENVIRONMENTS[0].id, environmentYaw: 0, roughness: 65, shadows: false, mainShadows: true, baseColor: '#5c5c5c' };
+const sliderKeys = ['opening', 'depth', 'radius', 'fov', 'azimuth', 'elevation', 'size', 'brightness', 'ambient', 'specular', 'environment', 'environmentYaw', 'roughness'];
 const ranges = Object.fromEntries(sliderKeys.map((key) => [key, {
   min: Number($(key).min), max: key === 'radius' ? MAX_FLOOR_RADIUS : Number($(key).max), step: Number($(key).step),
 }]));
@@ -37,6 +42,8 @@ const uniforms = {
   environmentMap: { value: null }, environmentReady: { value: false },
   environmentStrength: { value: defaults.environment / 100 }, environmentMaxLod: { value: 0 },
   environmentRotation: { value: new THREE.Matrix3() },
+  cameraMap: { value: null }, cameraMode: { value: false },
+  cameraAspect: { value: 1 }, cameraMaxLod: { value: 0 },
   cornerProfile: { value: CORNER_PROFILE.map(([value, slope]) => new THREE.Vector2(value, slope)) },
 };
 const scene = new THREE.Scene();
@@ -94,31 +101,22 @@ const zAxis = new THREE.Vector3(0, 0, 1);
 const baseLight = new THREE.Vector3();
 const targetLight = new THREE.Vector3();
 const environmentTransform = new THREE.Matrix4();
+const environmentYawTransform = new THREE.Matrix4();
+const inverseEnvironmentRotation = new THREE.Matrix3();
 let dirty = true;
 let frames = 0;
 let lastTime = performance.now();
 let fpsStart = lastTime;
 let measuredFps = '—';
 
-async function loadEnvironment() {
-  const pmrem = new THREE.PMREMGenerator(renderer);
-  let source;
-  try {
-    source = await new HDRLoader().loadAsync('./environment/lebombo_1k.hdr');
-    source.mapping = THREE.EquirectangularReflectionMapping;
-    const target = pmrem.fromEquirectangular(source);
-    uniforms.environmentMap.value = target.texture;
-    uniforms.environmentMaxLod.value = target.texture.mipmaps.length - 1;
-    uniforms.environmentReady.value = true;
-    $('environmentState').textContent = '室内の環境画像を読み込みました。';
-    dirty = true;
-  } catch {
-    $('environmentState').textContent = '環境画像を読み込めませんでした。ページを再読み込みしてください。';
-  } finally {
-    source?.dispose();
-    pmrem.dispose();
-  }
-}
+const environmentController = createEnvironmentController(renderer, uniforms, state => {
+  $('environmentState').textContent = state.message;
+  $('frontCamera').hidden = state.kind !== 'camera';
+  $('frontCamera').textContent = state.pending ? '開始をキャンセル' : state.active ? 'カメラを停止' : 'カメラを開始';
+  dirty = true;
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) environmentController.stopCamera(); });
+window.addEventListener('pagehide', () => environmentController.stopCamera());
 
 function diagnostics() {
   const box = stage.getBoundingClientRect();
@@ -169,9 +167,10 @@ function updateControls() {
   $('radius').max = Math.min(values.depth, MAX_FLOOR_RADIUS);
   $('radius').disabled = values.shape === 'bowl';
   $('shape').value = values.shape;
+  $('environmentSource').value = values.environmentSource;
   for (const key of sliderKeys) {
     $(key).value = values[key];
-    $(`${key}Value`).textContent = `${values[key]}${['fov', 'azimuth', 'elevation'].includes(key) ? '°' : '%'}`;
+    $(`${key}Value`).textContent = `${values[key]}${['fov', 'azimuth', 'elevation', 'environmentYaw'].includes(key) ? '°' : '%'}`;
   }
   for (const key of ['brightness', 'ambient', 'roughness']) uniforms[key].value = values[key] / 100;
   uniforms.specularStrength.value = values.specular / 100;
@@ -222,6 +221,15 @@ $('shape').addEventListener('change', () => {
   values.shape = $('shape').value;
   saveControls();
 });
+$('environmentSource').addEventListener('change', () => {
+  values.environmentSource = $('environmentSource').value;
+  saveControls();
+  environmentController.select(values.environmentSource);
+});
+$('frontCamera').onclick = () => {
+  if (environmentController.cameraRunning || environmentController.cameraPending) environmentController.stopCamera();
+  else environmentController.startCamera();
+};
 $('shadows').addEventListener('change', () => {
   values.shadows = $('shadows').checked;
   saveControls();
@@ -309,6 +317,7 @@ $('reset').onclick = () => {
   Object.assign(values, defaults);
   initializeCalibration();
   saveControls(true);
+  environmentController.select(values.environmentSource);
 };
 let drag;
 let dragged = false;
@@ -348,6 +357,7 @@ renderer.setAnimationLoop((time) => {
     smoothed.slerp(relative, 1 - Math.exp(-dt * 12));
     dirty = true;
   }
+  if (environmentController.update()) dirty = true;
   if (!dirty) return;
   const az = THREE.MathUtils.degToRad(values.azimuth);
   const el = THREE.MathUtils.degToRad(values.elevation);
@@ -355,9 +365,15 @@ renderer.setAnimationLoop((time) => {
   targetLight.copy(baseLight);
   if (hasReading && motionCalibrated) targetLight.applyQuaternion(smoothed);
   uniforms.lightPosition.value.copy(targetLight);
-  // Reflection directions go from phone space back into the fixed environment.
-  environmentTransform.makeRotationFromQuaternion(smoothed);
-  uniforms.environmentRotation.value.setFromMatrix4(environmentTransform).transpose();
+  const yaw = values.environmentYaw + environmentController.source.rotationY;
+  environmentYawTransform.makeRotationY(THREE.MathUtils.degToRad(yaw));
+  uniforms.environmentRotation.value.setFromMatrix4(environmentYawTransform);
+  // A camera feed already follows the phone; only static HDRs need inverse tilt.
+  if (environmentController.source.kind === 'hdr') {
+    environmentTransform.makeRotationFromQuaternion(smoothed);
+    inverseEnvironmentRotation.setFromMatrix4(environmentTransform).transpose();
+    uniforms.environmentRotation.value.multiply(inverseEnvironmentRotation);
+  }
   renderer.render(scene, camera);
   dirty = false;
 });
@@ -365,4 +381,4 @@ initializeCalibration();
 updateControls();
 resize();
 startTilt();
-loadEnvironment();
+environmentController.select(values.environmentSource);
