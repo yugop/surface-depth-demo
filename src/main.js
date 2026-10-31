@@ -8,6 +8,7 @@ import { AIR, CORNER_PROFILE, MAX_FLOOR_RADIUS, screenClip } from './iphone-air.
 import { loadSettings, saveSettings } from './settings.js';
 import { cavitySection, createCavityGeometry, createMainLayerGeometry } from './geometry.js';
 import './style.css';
+import './content-text.css';
 
 const $ = (id) => document.getElementById(id);
 for (const entry of ENVIRONMENTS) {
